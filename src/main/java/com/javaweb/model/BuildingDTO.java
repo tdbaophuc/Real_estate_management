@@ -13,7 +13,7 @@ public class BuildingDTO {
     private String brokerageFee;
     private String manageName;
     private String managePhone;
-    private List<Integer> rentArea = new ArrayList<>();
+    private String rentArea ;
 
     public String getName() {
         return name;
@@ -88,11 +88,11 @@ public class BuildingDTO {
         this.managePhone = managePhone;
     }
 
-    public List<Integer> getRentArea() {
+    public String getRentArea() {
         return rentArea;
     }
 
-    public void setRentArea(List<Integer> rentArea) {
+    public void setRentArea(String rentArea) {
         this.rentArea = rentArea;
     }
 }

@@ -31,8 +31,6 @@ public class BuildingEntity {
     private String manageName;
     private String managePhone;
     private Integer status;
-    private String districtName; // Lấy lấy từ bảng district thông qua district_id
-    private List<Integer> rentArea = new ArrayList<>();// Lấy từ bảng rent_area
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -109,14 +107,6 @@ public class BuildingEntity {
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }
 
-    public String getDistrictName() {
-        return districtName;
-    }
-
-    public void setDistrictName(String districtName) {
-        this.districtName = districtName;
-    }
-
     public String getManageName() {
         return manageName;
     }
@@ -133,11 +123,4 @@ public class BuildingEntity {
         this.managePhone = managePhone;
     }
 
-    public List<Integer> getRentArea() {
-        return rentArea;
-    }
-
-    public void setRentArea(List<Integer> rentArea) {
-        this.rentArea = rentArea;
-    }
 }

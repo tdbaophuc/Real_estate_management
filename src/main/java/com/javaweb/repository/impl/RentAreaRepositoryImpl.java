@@ -1,13 +1,11 @@
 package com.javaweb.repository.impl;
 
 import com.javaweb.repository.RentAreaRepository;
-import com.javaweb.repository.entity.DistrictEntity;
 import com.javaweb.repository.entity.RentAreaEntity;
 import com.javaweb.utils.ConnectionUtil;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;

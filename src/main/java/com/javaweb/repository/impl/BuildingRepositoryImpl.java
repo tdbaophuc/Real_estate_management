@@ -5,9 +5,7 @@ import com.javaweb.repository.entity.BuildingEntity;
 import com.javaweb.utils.ConnectionUtil;
 import com.javaweb.utils.StringUtil;
 import org.springframework.stereotype.Repository;
-
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;

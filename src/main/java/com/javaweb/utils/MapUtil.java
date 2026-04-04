@@ -1,2 +1,22 @@
-package com.javaweb.utils;public class MapUtil {
+package com.javaweb.utils;
+
+import java.util.List;
+import java.util.Map;
+
+public class  MapUtil {
+    public static <T> T getObject(Map<String, Object> param, String key, Class<T> tclass){
+        Object obj = param.getOrDefault(key, null);
+        if(obj!= null){
+          if(tclass.getTypeName().equals("java.lang.Long")){
+              obj = obj != "" ? Long.valueOf(obj.toString()) : null;
+          }
+          else if(tclass.getTypeName().equals("java.lang.Integer")){
+              obj = obj != "" ? Integer.valueOf(obj.toString()) : null;
+          } else if (tclass.getTypeName().equals("java.lang.String")) {
+              obj = obj.toString();
+          }
+          return tclass.cast(obj);
+        };
+        return null;
+    }
 }

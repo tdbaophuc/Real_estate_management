@@ -25,11 +25,14 @@ This project was built from the ground up without relying heavily on ORM 'magic'
 *   **Framework**: Spring Boot (v3.2.2) 
     *   `spring-boot-starter-web`
 *   **Database**: MySQL (`mysql-connector-j`)
-*   **Design Patterns**: 
+*   **Design Patterns**:
+    *   Creational Pattern: Builder Pattern – Implemented to handle complex Search Filter objects and DTOs, ensuring Immutability and enhancing code readability.
     *   3-Tier Architecture (Controller, Service, Repository layers)
     *   Dependency Injection (IoC)
     *   DTO Pattern
-*   **Utilities**: ModelMapper for Object Mapping
+*   **Utilities**: 
+    *   ModelMapper for Object Mapping
+    *   Leveraged **Java Reflection API** to dynamically traverse object fields, automating SQL generation and ensuring the system is easily extensible for new search criteria.          
 
 ## 📁 Project Structure (Clean Code)
 

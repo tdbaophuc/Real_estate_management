@@ -13,7 +13,7 @@ public class BuildingDTO {
     private String brokerageFee;
     private String manageName;
     private String managePhone;
-    private String rentArea ;
+    private String rentArea;
 
     public String getName() {
         return name;

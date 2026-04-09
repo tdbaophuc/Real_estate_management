@@ -18,9 +18,9 @@ public class BuildingSearchBuilder {
     private Integer priceFrom;
     private Integer priceTo;
     private Integer districtId;
-    private Integer staff_id;
-    private String rentAreaFrom;
-    private String rentAreaTo;
+    private Integer staffId;
+    private Long rentAreaFrom;
+    private Long rentAreaTo;
     private List<String> typeCode = new ArrayList<>();
 
     private BuildingSearchBuilder(Builder builder){
@@ -36,7 +36,7 @@ public class BuildingSearchBuilder {
         this.priceFrom= builder.priceFrom;
         this.priceTo= builder.priceTo;
         this.districtId=builder.districtId;
-        this.staff_id= builder.staff_id;
+        this.staffId= builder.staffId;
         this.rentAreaFrom= builder.rentAreaFrom;
         this.rentAreaTo= builder.rentAreaTo;
         this.typeCode=builder.typeCode;
@@ -90,15 +90,15 @@ public class BuildingSearchBuilder {
         return districtId;
     }
 
-    public Integer getStaff_id() {
-        return staff_id;
+    public Integer getStaffId() {
+        return staffId;
     }
 
-    public String getRentAreaFrom() {
+    public Long getRentAreaFrom() {
         return rentAreaFrom;
     }
 
-    public String getRentAreaTo() {
+    public Long getRentAreaTo() {
         return rentAreaTo;
     }
 
@@ -119,9 +119,9 @@ public class BuildingSearchBuilder {
         private Integer priceFrom;
         private Integer priceTo;
         private Integer districtId;
-        private Integer staff_id;
-        private String rentAreaFrom;
-        private String rentAreaTo;
+        private Integer staffId;
+        private Long rentAreaFrom;
+        private Long rentAreaTo;
         private List<String> typeCode = new ArrayList<>();
 
         public Builder setPriceFrom(Integer priceFrom) {
@@ -184,17 +184,17 @@ public class BuildingSearchBuilder {
             return this;
         }
 
-        public Builder setStaff_id(Integer staff_id) {
-            this.staff_id = staff_id;
+        public Builder setStaffId(Integer staffId) {
+            this.staffId = staffId;
             return this;
         }
 
-        public Builder setRentAreaFrom(String rentAreaFrom) {
+        public Builder setRentAreaFrom(Long rentAreaFrom) {
             this.rentAreaFrom = rentAreaFrom;
             return this;
         }
 
-        public Builder setRentAreaTo(String rentAreaTo) {
+        public Builder setRentAreaTo(Long rentAreaTo) {
             this.rentAreaTo = rentAreaTo;
             return this;
         }

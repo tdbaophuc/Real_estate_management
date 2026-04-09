@@ -1,7 +1,7 @@
 package com.javaweb.utils;
 
 public class CheckNumberUtil {
-    public boolean isNumber(String data)
+    public static boolean isNumber(String data)
     {
       try {
           Integer.parseInt(data);

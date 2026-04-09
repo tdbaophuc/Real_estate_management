@@ -1,6 +1,9 @@
 package com.javaweb.service.impl;
 
+import com.javaweb.builder.BuildingSearchBuilder;
 import com.javaweb.converter.BuildingDTOConverter;
+import com.javaweb.converter.BuildingSearchBuilderConverter;
+import com.javaweb.builder.BuildingSearchBuilder;
 import com.javaweb.model.BuildingDTO;
 import com.javaweb.repository.BuildingRepository;
 import com.javaweb.repository.entity.BuildingEntity;
@@ -21,14 +24,17 @@ public class BuildingServiceImpl implements BuildingService {
     @Autowired
     private BuildingDTOConverter buildingDTOConverter;
 
-    @Override
-    public List<BuildingDTO> findAll(Map<String, String> param,List<String> buildingType) {
-        List<BuildingDTO> result = new ArrayList<BuildingDTO>();
-        List<BuildingEntity> buildingEntities = buildingRepository.findAll(param, buildingType);
+    @Autowired
+    private BuildingSearchBuilderConverter buildingSearchBuilderConverter;
 
+    @Override
+    public List<BuildingDTO> findAll(Map<String, Object> param,List<String> typeCode) {
+        BuildingSearchBuilder buildingSearchBuilder = buildingSearchBuilderConverter.toBuildingSearchBuilder(param,typeCode);
+        List<BuildingDTO> result = new ArrayList<BuildingDTO>();
+        List<BuildingEntity> buildingEntities = buildingRepository.findAll(buildingSearchBuilder);
         for (BuildingEntity  item:buildingEntities)
         {
-           BuildingDTO building = buildingDTOConverter.toBuildingDTO(item);
+           BuildingDTO building = buildingDTOConverter.toBuildingDTO(item, buildingSearchBuilder);
            result.add(building);
         }
         return result;

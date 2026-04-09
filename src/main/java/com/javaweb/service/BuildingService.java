@@ -6,5 +6,5 @@ import java.util.List;
 import java.util.Map;
 
 public interface BuildingService  {
-    List<BuildingDTO> findAll(Map<String, String> param, List<String> buildingType);
+    List<BuildingDTO> findAll(Map<String, Object> param, List<String> buildingType);
 }

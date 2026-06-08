@@ -1,10 +1,31 @@
 package com.javaweb.repository.entity;
 
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "rent_Area")
 public class RentAreaEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
-    private Integer building_id;
+
+    @Column(name = "value")
     private Long value;
+
+    @Column(name = "status")
     private Integer status;
+
+    @ManyToOne
+    @JoinColumn(name = "building_id")
+    private BuildingEntity building;
+
+    public BuildingEntity getBuilding() {
+        return building;
+    }
+
+    public void setBuilding(BuildingEntity building) {
+        this.building = building;
+    }
 
     public Integer getId() {
         return id;
@@ -14,13 +35,6 @@ public class RentAreaEntity {
         this.id = id;
     }
 
-    public Integer getBuilding_id() {
-        return building_id;
-    }
-
-    public void setBuilding_id(Integer building_id) {
-        this.building_id = building_id;
-    }
 
     public Long getValue() {
         return value;

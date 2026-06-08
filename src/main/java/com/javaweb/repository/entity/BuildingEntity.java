@@ -1,42 +1,118 @@
 package com.javaweb.repository.entity;
 
+import jakarta.persistence.*;
+
 import java.util.ArrayList;
 import java.util.List;
 
+@Entity
+@Table(name = "building")
 public class BuildingEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
-    private Integer districtId;
+
+    @Column(name = "code")
     private String code;
+
+    @Column(name = "name")
     private String name;
+
+    @Column(name = "ward")
     private String ward;
+
+    @Column(name = "street")
     private String street;
+
+    @Column(name = "structure")
     private String structure;
+
+    @Column(name = "numberOfBasement")
     private Integer numberOfBasement;
+
+    @Column(name = "floorArea")
     private Integer floorArea;
+
+    @Column(name = "direction")
     private String direction;
+
+    @Column(name = "class")
     private String level; // Map từ cột 'class' trong DB
+
+    @Column(name = "price")
     private Integer price;
+
+    @Column(name = "serviceFee")
     private String serviceFee;
+
+    @Column(name = "carFee")
     private String carFee;
+
+    @Column(name = "priceDescription")
     private String priceDescription;
+
+    @Column(name = "motorbikeFee")
     private String motorbikeFee;
+
+    @Column(name = "overtimeFee")
     private String overtimeFee;
+
+    @Column(name = "electricity")
     private String electricity;
+
+    @Column(name = "deposit")
     private String deposit;
+
+    @Column(name = "payment")
     private String payment;
+
+    @Column(name = "rentTime")
     private String rentTime;
+
+    @Column(name = "decorationTime")
     private String decorationTime;
+
+    @Column(name = "brokerageFee")
     private String brokerageFee;
+
+    @Column(name = "note")
     private String note;
+
+    @Column(name = "manageName")
     private String manageName;
+
+    @Column(name = "managePhone")
     private String managePhone;
+
+    @Column(name = "status")
     private Integer status;
+
+    @ManyToOne
+    @JoinColumn(name = "district_id")
+    private DistrictEntity district;
+
+    @OneToMany(mappedBy = "building", fetch = FetchType.LAZY)
+    private List<RentAreaEntity> rentArea = new ArrayList<>();
+
+    public DistrictEntity getDistrict() {
+        return district;
+    }
+
+    public void setDistrict(DistrictEntity district) {
+        this.district = district;
+    }
+
+    public List<RentAreaEntity> getRentArea() {
+        return rentArea;
+    }
+
+    public void setRentArea(List<RentAreaEntity> rentArea) {
+        this.rentArea = rentArea;
+    }
+
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
-
-    public Integer getDistrictId() { return districtId; }
-    public void setDistrictId(Integer districtId) { this.districtId = districtId; }
 
     public String getCode() { return code; }
     public void setCode(String code) { this.code = code; }

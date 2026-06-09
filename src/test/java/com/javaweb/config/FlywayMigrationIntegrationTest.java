@@ -22,10 +22,10 @@ class FlywayMigrationIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void shouldApplyAuthBaselineMigration() {
+    void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("complete auth schema and seed permissions");
+                .isEqualTo("create property schema and seed master data");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -44,6 +44,16 @@ class FlywayMigrationIntegrationTest {
                 "role_permissions",
                 "refresh_tokens",
                 "otp_tokens",
+                "provinces",
+                "districts",
+                "wards",
+                "addresses",
+                "property_types",
+                "amenities",
+                "properties",
+                "property_amenities",
+                "property_images",
+                "property_legal_documents",
                 "flyway_schema_history"
         );
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM roles", Integer.class))
@@ -85,5 +95,42 @@ class FlywayMigrationIntegrationTest {
         )).isEqualTo(3);
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM users", Integer.class))
                 .isZero();
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT code FROM property_types ORDER BY display_order",
+                String.class
+        )).containsExactly(
+                "APARTMENT",
+                "HOUSE",
+                "VILLA",
+                "LAND",
+                "OFFICE",
+                "RETAIL",
+                "WAREHOUSE"
+        );
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT code FROM amenities ORDER BY display_order",
+                String.class
+        )).containsExactly(
+                "PARKING",
+                "ELEVATOR",
+                "SECURITY",
+                "SWIMMING_POOL",
+                "GYM",
+                "BALCONY",
+                "AIR_CONDITIONING",
+                "FURNISHED"
+        );
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM provinces", Integer.class))
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.table_constraints
+                WHERE table_schema = 'PUBLIC'
+                  AND table_name = 'PROPERTIES'
+                  AND constraint_type = 'FOREIGN KEY'
+                """,
+                Integer.class
+        )).isEqualTo(5);
     }
 }

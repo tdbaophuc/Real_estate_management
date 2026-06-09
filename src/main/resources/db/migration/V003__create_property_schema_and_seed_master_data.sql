@@ -1,0 +1,231 @@
+CREATE TABLE provinces (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    code VARCHAR(20) NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    administrative_type VARCHAR(50),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_provinces PRIMARY KEY (id),
+    CONSTRAINT uk_provinces_code UNIQUE (code)
+);
+
+CREATE INDEX idx_provinces_name ON provinces (name);
+
+CREATE TABLE districts (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    province_id BIGINT NOT NULL,
+    code VARCHAR(20) NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    administrative_type VARCHAR(50),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_districts PRIMARY KEY (id),
+    CONSTRAINT uk_districts_code UNIQUE (code),
+    CONSTRAINT fk_districts_province FOREIGN KEY (province_id) REFERENCES provinces (id)
+);
+
+CREATE INDEX idx_districts_province_name ON districts (province_id, name);
+
+CREATE TABLE wards (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    district_id BIGINT NOT NULL,
+    code VARCHAR(20) NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    administrative_type VARCHAR(50),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_wards PRIMARY KEY (id),
+    CONSTRAINT uk_wards_code UNIQUE (code),
+    CONSTRAINT fk_wards_district FOREIGN KEY (district_id) REFERENCES districts (id)
+);
+
+CREATE INDEX idx_wards_district_name ON wards (district_id, name);
+
+CREATE TABLE addresses (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    province_id BIGINT NOT NULL,
+    district_id BIGINT,
+    ward_id BIGINT,
+    street_address VARCHAR(255) NOT NULL,
+    full_address VARCHAR(500),
+    latitude DECIMAL(10, 7),
+    longitude DECIMAL(10, 7),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_addresses PRIMARY KEY (id),
+    CONSTRAINT fk_addresses_province FOREIGN KEY (province_id) REFERENCES provinces (id),
+    CONSTRAINT fk_addresses_district FOREIGN KEY (district_id) REFERENCES districts (id),
+    CONSTRAINT fk_addresses_ward FOREIGN KEY (ward_id) REFERENCES wards (id),
+    CONSTRAINT ck_addresses_latitude CHECK (latitude IS NULL OR latitude BETWEEN -90 AND 90),
+    CONSTRAINT ck_addresses_longitude CHECK (longitude IS NULL OR longitude BETWEEN -180 AND 180)
+);
+
+CREATE INDEX idx_addresses_location ON addresses (province_id, district_id, ward_id);
+
+CREATE TABLE property_types (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    code VARCHAR(50) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description VARCHAR(255),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_property_types PRIMARY KEY (id),
+    CONSTRAINT uk_property_types_code UNIQUE (code)
+);
+
+CREATE TABLE amenities (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    code VARCHAR(50) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    description VARCHAR(255),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_amenities PRIMARY KEY (id),
+    CONSTRAINT uk_amenities_code UNIQUE (code)
+);
+
+CREATE INDEX idx_amenities_category ON amenities (category, active);
+
+CREATE TABLE properties (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    code VARCHAR(50) NOT NULL,
+    property_type_id BIGINT NOT NULL,
+    address_id BIGINT NOT NULL,
+    owner_id BIGINT,
+    created_by BIGINT NOT NULL,
+    assigned_agent_id BIGINT,
+    name VARCHAR(200) NOT NULL,
+    description TEXT,
+    purpose VARCHAR(30) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
+    price DECIMAL(19, 2),
+    currency VARCHAR(3) NOT NULL DEFAULT 'VND',
+    land_area DECIMAL(12, 2),
+    floor_area DECIMAL(12, 2),
+    bedrooms INTEGER,
+    bathrooms INTEGER,
+    floors INTEGER,
+    direction VARCHAR(30),
+    legal_status VARCHAR(50),
+    furniture_status VARCHAR(50),
+    video_url VARCHAR(500),
+    virtual_tour_url VARCHAR(500),
+    available_from DATE,
+    deleted_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_properties PRIMARY KEY (id),
+    CONSTRAINT uk_properties_code UNIQUE (code),
+    CONSTRAINT uk_properties_address UNIQUE (address_id),
+    CONSTRAINT fk_properties_type FOREIGN KEY (property_type_id) REFERENCES property_types (id),
+    CONSTRAINT fk_properties_address FOREIGN KEY (address_id) REFERENCES addresses (id),
+    CONSTRAINT fk_properties_owner FOREIGN KEY (owner_id) REFERENCES users (id),
+    CONSTRAINT fk_properties_created_by FOREIGN KEY (created_by) REFERENCES users (id),
+    CONSTRAINT fk_properties_assigned_agent FOREIGN KEY (assigned_agent_id) REFERENCES users (id),
+    CONSTRAINT ck_properties_price CHECK (price IS NULL OR price >= 0),
+    CONSTRAINT ck_properties_land_area CHECK (land_area IS NULL OR land_area > 0),
+    CONSTRAINT ck_properties_floor_area CHECK (floor_area IS NULL OR floor_area > 0),
+    CONSTRAINT ck_properties_bedrooms CHECK (bedrooms IS NULL OR bedrooms >= 0),
+    CONSTRAINT ck_properties_bathrooms CHECK (bathrooms IS NULL OR bathrooms >= 0),
+    CONSTRAINT ck_properties_floors CHECK (floors IS NULL OR floors >= 0)
+);
+
+CREATE INDEX idx_properties_type_status ON properties (property_type_id, status);
+CREATE INDEX idx_properties_purpose_status_price ON properties (purpose, status, price);
+CREATE INDEX idx_properties_area ON properties (land_area, floor_area);
+CREATE INDEX idx_properties_created_by ON properties (created_by);
+CREATE INDEX idx_properties_assigned_agent ON properties (assigned_agent_id);
+CREATE INDEX idx_properties_created_at ON properties (created_at);
+
+CREATE TABLE property_amenities (
+    property_id BIGINT NOT NULL,
+    amenity_id BIGINT NOT NULL,
+    details VARCHAR(255),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_property_amenities PRIMARY KEY (property_id, amenity_id),
+    CONSTRAINT fk_property_amenities_property FOREIGN KEY (property_id) REFERENCES properties (id) ON DELETE CASCADE,
+    CONSTRAINT fk_property_amenities_amenity FOREIGN KEY (amenity_id) REFERENCES amenities (id)
+);
+
+CREATE INDEX idx_property_amenities_amenity ON property_amenities (amenity_id, property_id);
+
+CREATE TABLE property_images (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    property_id BIGINT NOT NULL,
+    uploaded_by BIGINT NOT NULL,
+    storage_key VARCHAR(500),
+    image_url VARCHAR(1000) NOT NULL,
+    file_name VARCHAR(255),
+    mime_type VARCHAR(100),
+    file_size BIGINT,
+    alt_text VARCHAR(255),
+    cover_image BOOLEAN NOT NULL DEFAULT FALSE,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_property_images PRIMARY KEY (id),
+    CONSTRAINT uk_property_images_storage_key UNIQUE (storage_key),
+    CONSTRAINT fk_property_images_property FOREIGN KEY (property_id) REFERENCES properties (id) ON DELETE CASCADE,
+    CONSTRAINT fk_property_images_uploaded_by FOREIGN KEY (uploaded_by) REFERENCES users (id),
+    CONSTRAINT ck_property_images_file_size CHECK (file_size IS NULL OR file_size >= 0)
+);
+
+CREATE INDEX idx_property_images_property_order ON property_images (property_id, cover_image, display_order);
+
+CREATE TABLE property_legal_documents (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    property_id BIGINT NOT NULL,
+    uploaded_by BIGINT NOT NULL,
+    document_type VARCHAR(50) NOT NULL,
+    document_number VARCHAR(100),
+    issued_by VARCHAR(200),
+    issued_date DATE,
+    expiry_date DATE,
+    verification_status VARCHAR(30) NOT NULL DEFAULT 'UNVERIFIED',
+    storage_key VARCHAR(500),
+    document_url VARCHAR(1000),
+    file_name VARCHAR(255),
+    notes VARCHAR(1000),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_property_legal_documents PRIMARY KEY (id),
+    CONSTRAINT uk_property_legal_documents_storage_key UNIQUE (storage_key),
+    CONSTRAINT fk_property_legal_documents_property FOREIGN KEY (property_id) REFERENCES properties (id) ON DELETE CASCADE,
+    CONSTRAINT fk_property_legal_documents_uploaded_by FOREIGN KEY (uploaded_by) REFERENCES users (id),
+    CONSTRAINT ck_property_legal_documents_dates CHECK (
+        expiry_date IS NULL OR issued_date IS NULL OR expiry_date >= issued_date
+    )
+);
+
+CREATE INDEX idx_property_legal_documents_property_type
+    ON property_legal_documents (property_id, document_type);
+CREATE INDEX idx_property_legal_documents_verification
+    ON property_legal_documents (verification_status);
+
+INSERT INTO property_types (code, name, description, display_order)
+VALUES
+    ('APARTMENT', 'Apartment', 'Apartment or condominium unit', 10),
+    ('HOUSE', 'House', 'Detached, semi-detached or townhouse property', 20),
+    ('VILLA', 'Villa', 'Villa or luxury residential property', 30),
+    ('LAND', 'Land', 'Residential, commercial or development land', 40),
+    ('OFFICE', 'Office', 'Office space or office building', 50),
+    ('RETAIL', 'Retail', 'Shop, showroom or other retail property', 60),
+    ('WAREHOUSE', 'Warehouse', 'Warehouse, factory or industrial property', 70);
+
+INSERT INTO amenities (code, name, category, description, display_order)
+VALUES
+    ('PARKING', 'Parking', 'ACCESS', 'On-site parking space', 10),
+    ('ELEVATOR', 'Elevator', 'ACCESS', 'Passenger or service elevator', 20),
+    ('SECURITY', 'Security', 'SECURITY', 'On-site security or controlled access', 30),
+    ('SWIMMING_POOL', 'Swimming pool', 'LEISURE', 'Shared or private swimming pool', 40),
+    ('GYM', 'Gym', 'LEISURE', 'Shared or private fitness facility', 50),
+    ('BALCONY', 'Balcony', 'FEATURE', 'Private balcony or terrace', 60),
+    ('AIR_CONDITIONING', 'Air conditioning', 'FEATURE', 'Installed air-conditioning system', 70),
+    ('FURNISHED', 'Furnished', 'FEATURE', 'Property is supplied with furniture', 80);

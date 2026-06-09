@@ -5,7 +5,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,7 +15,7 @@ public class DevAdminSeeder implements ApplicationRunner {
     private static final int MINIMUM_PASSWORD_LENGTH = 12;
 
     private final JdbcTemplate jdbcTemplate;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final PasswordEncoder passwordEncoder;
     private final boolean enabled;
     private final String email;
     private final String password;
@@ -23,12 +23,14 @@ public class DevAdminSeeder implements ApplicationRunner {
 
     public DevAdminSeeder(
             JdbcTemplate jdbcTemplate,
+            PasswordEncoder passwordEncoder,
             @Value("${app.seed.admin.enabled:false}") boolean enabled,
             @Value("${app.seed.admin.email:admin@realestate.local}") String email,
             @Value("${app.seed.admin.password:}") String password,
             @Value("${app.seed.admin.full-name:Development Administrator}") String fullName
     ) {
         this.jdbcTemplate = jdbcTemplate;
+        this.passwordEncoder = passwordEncoder;
         this.enabled = enabled;
         this.email = email;
         this.password = password;

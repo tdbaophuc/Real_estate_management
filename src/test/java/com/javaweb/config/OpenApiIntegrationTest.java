@@ -39,6 +39,18 @@ class OpenApiIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/v1/admin/users/{userId}/roles'].put").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/properties'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/properties'].get").exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/properties'].get.parameters[?(@.name == 'keyword')]"
+                ).exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/properties'].get.parameters[?(@.name == 'propertyTypeId')]"
+                ).exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/properties'].get.parameters[?(@.name == 'minPrice')]"
+                ).exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/properties'].get.parameters[?(@.name == 'status')]"
+                ).exists())
                 .andExpect(jsonPath("$.paths['/api/v1/properties/{propertyId}'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/properties/{propertyId}'].put").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/properties/{propertyId}'].delete").exists())

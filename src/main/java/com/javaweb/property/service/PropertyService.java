@@ -12,6 +12,7 @@ import com.javaweb.common.exception.ResourceNotFoundException;
 import com.javaweb.common.response.PageResponse;
 import com.javaweb.property.dto.PropertyAmenityRequest;
 import com.javaweb.property.dto.PropertyResponse;
+import com.javaweb.property.dto.PropertySearchRequest;
 import com.javaweb.property.dto.PropertyUpsertRequest;
 import com.javaweb.property.dto.UpdatePropertyStatusRequest;
 import com.javaweb.property.entity.Address;
@@ -27,6 +28,7 @@ import com.javaweb.property.mapper.PropertyMapper;
 import com.javaweb.property.repository.AmenityRepository;
 import com.javaweb.property.repository.DistrictRepository;
 import com.javaweb.property.repository.PropertyRepository;
+import com.javaweb.property.repository.PropertySpecifications;
 import com.javaweb.property.repository.PropertyTypeRepository;
 import com.javaweb.property.repository.ProvinceRepository;
 import com.javaweb.property.repository.WardRepository;
@@ -49,7 +51,20 @@ import java.util.stream.Collectors;
 @Service
 public class PropertyService {
     private static final Set<String> ALLOWED_SORT_FIELDS =
-            Set.of("id", "code", "name", "status", "price", "createdAt", "updatedAt");
+            Set.of(
+                    "id",
+                    "code",
+                    "name",
+                    "purpose",
+                    "status",
+                    "price",
+                    "landArea",
+                    "floorArea",
+                    "bedrooms",
+                    "bathrooms",
+                    "createdAt",
+                    "updatedAt"
+            );
     private static final Map<PropertyStatus, Set<PropertyStatus>> ALLOWED_STATUS_TRANSITIONS =
             Map.of(
                     PropertyStatus.DRAFT, Set.of(PropertyStatus.AVAILABLE, PropertyStatus.INACTIVE),
@@ -178,18 +193,21 @@ public class PropertyService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<PropertyResponse> list(
-            int page,
-            int size,
-            String sortBy,
-            Sort.Direction direction,
+    public PageResponse<PropertyResponse> search(
+            PropertySearchRequest request,
             AuthUserPrincipal actor
     ) {
-        String safeSortBy = requireAllowedSortField(sortBy);
-        PageRequest pageable = PageRequest.of(page, size, Sort.by(direction, safeSortBy));
-        Page<Property> propertyPage = isManagerOrAdmin(actor)
-                ? propertyRepository.findAllByDeletedAtIsNull(pageable)
-                : propertyRepository.findAllVisibleToAgent(actor.id(), pageable);
+        String safeSortBy = requireAllowedSortField(request.sortBy());
+        PageRequest pageable = PageRequest.of(
+                request.page(),
+                request.size(),
+                Sort.by(request.direction(), safeSortBy)
+        );
+        Long visibleUserId = isManagerOrAdmin(actor) ? null : actor.id();
+        Page<Property> propertyPage = propertyRepository.findAll(
+                PropertySpecifications.search(request, visibleUserId),
+                pageable
+        );
 
         List<Long> ids = propertyPage.getContent().stream()
                 .map(Property::getId)

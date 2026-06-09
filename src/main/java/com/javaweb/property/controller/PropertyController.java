@@ -4,15 +4,14 @@ import com.javaweb.auth.security.AuthUserPrincipal;
 import com.javaweb.common.response.ApiResponse;
 import com.javaweb.common.response.PageResponse;
 import com.javaweb.property.dto.PropertyResponse;
+import com.javaweb.property.dto.PropertySearchRequest;
 import com.javaweb.property.dto.PropertyUpsertRequest;
 import com.javaweb.property.dto.UpdatePropertyStatusRequest;
 import com.javaweb.property.service.PropertyService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
-import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
@@ -24,7 +23,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -42,17 +40,10 @@ public class PropertyController {
 
     @GetMapping
     public ApiResponse<PageResponse<PropertyResponse>> list(
-            @RequestParam(defaultValue = "0") @Min(value = 0, message = "page must be at least 0")
-            int page,
-            @RequestParam(defaultValue = "20")
-            @Min(value = 1, message = "size must be at least 1")
-            @Max(value = 100, message = "size must not exceed 100")
-            int size,
-            @RequestParam(defaultValue = "createdAt") String sortBy,
-            @RequestParam(defaultValue = "DESC") Sort.Direction direction,
+            @Valid @ParameterObject PropertySearchRequest request,
             @AuthenticationPrincipal AuthUserPrincipal actor
     ) {
-        return ApiResponse.success(propertyService.list(page, size, sortBy, direction, actor));
+        return ApiResponse.success(propertyService.search(request, actor));
     }
 
     @GetMapping("/{propertyId}")

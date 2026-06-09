@@ -9,5 +9,7 @@ import java.util.Optional;
 public interface DistrictRepository extends JpaRepository<District, Long> {
     Optional<District> findByCode(String code);
 
+    Optional<District> findByIdAndActiveTrue(Long id);
+
     List<District> findAllByProvinceIdAndActiveTrueOrderByNameAsc(Long provinceId);
 }

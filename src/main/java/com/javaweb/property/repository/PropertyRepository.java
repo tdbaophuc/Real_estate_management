@@ -15,6 +15,8 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
 
     boolean existsByCode(String code);
 
+    boolean existsByCodeAndIdNot(String code, Long id);
+
     @EntityGraph(attributePaths = {
             "propertyType",
             "address",
@@ -26,6 +28,22 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
             "assignedAgent"
     })
     Optional<Property> findWithCoreDetailsById(Long id);
+
+    @EntityGraph(attributePaths = {
+            "propertyType",
+            "address",
+            "address.province",
+            "address.district",
+            "address.ward",
+            "owner",
+            "owner.roles",
+            "createdBy",
+            "assignedAgent",
+            "assignedAgent.roles",
+            "amenities",
+            "amenities.amenity"
+    })
+    Optional<Property> findWithUpdateDetailsById(Long id);
 
     Page<Property> findAllByPropertyTypeIdAndStatusAndDeletedAtIsNull(
             Long propertyTypeId,

@@ -28,7 +28,10 @@ class OpenApiIntegrationTest {
                 .andExpect(content().contentTypeCompatibleWith("application/json"))
                 .andExpect(jsonPath("$.info.title").value("Real Estate Management API"))
                 .andExpect(jsonPath("$.info.version").value("v1"))
+                .andExpect(jsonPath("$.paths['/api/v1/auth/register'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/auth/login'].post").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/refresh-token'].post").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/logout'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/auth/me'].get").exists())
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"));

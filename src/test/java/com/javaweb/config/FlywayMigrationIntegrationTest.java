@@ -25,7 +25,7 @@ class FlywayMigrationIntegrationTest {
     void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("create file resources");
+                .isEqualTo("link property images to file resources");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -133,5 +133,15 @@ class FlywayMigrationIntegrationTest {
                 """,
                 Integer.class
         )).isEqualTo(5);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'PUBLIC'
+                  AND table_name = 'PROPERTY_IMAGES'
+                  AND column_name = 'FILE_RESOURCE_ID'
+                """,
+                Integer.class
+        )).isEqualTo(1);
     }
 }

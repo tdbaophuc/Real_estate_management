@@ -14,6 +14,8 @@ import java.util.Set;
 
 @Component
 public class FileUploadValidator {
+    private static final Set<String> IMAGE_CONTENT_TYPES =
+            Set.of("image/jpeg", "image/png", "image/webp");
     private static final Map<String, Set<String>> ALLOWED_EXTENSIONS = Map.of(
             "image/jpeg", Set.of("jpg", "jpeg"),
             "image/png", Set.of("png"),
@@ -63,6 +65,16 @@ public class FileUploadValidator {
             throw new FileUploadException("File extension does not match its content type");
         }
         validateSignature(file, contentType);
+    }
+
+    public void validateImage(MultipartFile file) {
+        validate(file);
+        String contentType = file.getContentType() == null
+                ? ""
+                : file.getContentType().toLowerCase(Locale.ROOT);
+        if (!IMAGE_CONTENT_TYPES.contains(contentType)) {
+            throw new FileUploadException("Property images must use an allowed image type");
+        }
     }
 
     private void validateSignature(MultipartFile file, String contentType) {

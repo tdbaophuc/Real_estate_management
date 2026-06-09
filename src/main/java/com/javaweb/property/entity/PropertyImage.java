@@ -1,6 +1,7 @@
 package com.javaweb.property.entity;
 
 import com.javaweb.auth.entity.User;
+import com.javaweb.storage.entity.FileResource;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -9,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 
 @Entity
@@ -25,6 +27,10 @@ public class PropertyImage extends CreatedEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "uploaded_by", nullable = false)
     private User uploadedBy;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "file_resource_id", unique = true)
+    private FileResource fileResource;
 
     @Column(name = "storage_key", unique = true, length = 500)
     private String storageKey;
@@ -53,6 +59,16 @@ public class PropertyImage extends CreatedEntity {
     protected PropertyImage() {
     }
 
+    public PropertyImage(User uploadedBy, FileResource fileResource) {
+        this.uploadedBy = uploadedBy;
+        this.fileResource = fileResource;
+        this.storageKey = fileResource.getStorageKey();
+        this.imageUrl = fileResource.getPublicUrl();
+        this.fileName = fileResource.getOriginalFileName();
+        this.mimeType = fileResource.getContentType();
+        this.fileSize = fileResource.getFileSize();
+    }
+
     public PropertyImage(User uploadedBy, String imageUrl) {
         this.uploadedBy = uploadedBy;
         this.imageUrl = imageUrl;
@@ -72,6 +88,10 @@ public class PropertyImage extends CreatedEntity {
 
     public User getUploadedBy() {
         return uploadedBy;
+    }
+
+    public FileResource getFileResource() {
+        return fileResource;
     }
 
     public String getStorageKey() {

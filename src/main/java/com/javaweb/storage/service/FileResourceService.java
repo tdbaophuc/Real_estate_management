@@ -39,14 +39,40 @@ public class FileResourceService {
             FileAccessLevel accessLevel,
             AuthUserPrincipal actor
     ) {
+        return FileResourceResponse.from(store(file, accessLevel, actor));
+    }
+
+    @Transactional
+    public FileResource store(
+            MultipartFile file,
+            FileAccessLevel accessLevel,
+            AuthUserPrincipal actor
+    ) {
         validator.validate(file);
+        return storeValidated(file, accessLevel, actor);
+    }
+
+    @Transactional
+    public FileResource storeImage(
+            MultipartFile file,
+            FileAccessLevel accessLevel,
+            AuthUserPrincipal actor
+    ) {
+        validator.validateImage(file);
+        return storeValidated(file, accessLevel, actor);
+    }
+
+    private FileResource storeValidated(
+            MultipartFile file,
+            FileAccessLevel accessLevel,
+            AuthUserPrincipal actor
+    ) {
         User uploader = userRepository.findById(actor.id())
                 .orElseThrow(() -> new ResourceNotFoundException("Authenticated user not found"));
         FileAccessLevel resolvedAccess = accessLevel == null
                 ? FileAccessLevel.PRIVATE
                 : accessLevel;
         StoredFile stored = fileStorageService.store(file, resolvedAccess);
-
         try {
             FileResource resource = new FileResource(
                     uploader,
@@ -59,10 +85,17 @@ public class FileResourceService {
                     resolvedAccess,
                     stored.publicUrl()
             );
-            return FileResourceResponse.from(fileResourceRepository.saveAndFlush(resource));
+            return fileResourceRepository.saveAndFlush(resource);
         } catch (RuntimeException exception) {
             fileStorageService.delete(stored.storageKey());
             throw exception;
         }
+    }
+
+    @Transactional
+    public void delete(FileResource resource) {
+        fileResourceRepository.delete(resource);
+        fileResourceRepository.flush();
+        fileStorageService.delete(resource.getStorageKey());
     }
 }

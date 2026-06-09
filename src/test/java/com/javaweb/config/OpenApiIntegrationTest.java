@@ -55,6 +55,14 @@ class OpenApiIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/v1/properties/{propertyId}'].put").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/properties/{propertyId}'].delete").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/properties/{propertyId}/status'].patch").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/properties/{propertyId}/images'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/properties/{propertyId}/images'].post").exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/properties/{propertyId}/images/{imageId}'].delete"
+                ).exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/properties/{propertyId}/cover-image/{imageId}'].patch"
+                ).exists())
                 .andExpect(jsonPath("$.paths['/api/v1/files/upload'].post").exists())
                 .andExpect(jsonPath(
                         "$.paths['/api/v1/files/upload'].post.requestBody.content['multipart/form-data']"

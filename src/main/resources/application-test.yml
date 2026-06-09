@@ -20,3 +20,5 @@ app:
       secret: dGVzdC1vbmx5LWp3dC1zZWNyZXQtbXVzdC1iZS1hdC1sZWFzdC0zMi1ieXRlcw==
       access-token-expiration: PT30M
       refresh-token-expiration: P30D
+  storage:
+    local-root: target/test-storage

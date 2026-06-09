@@ -55,6 +55,10 @@ class OpenApiIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/v1/properties/{propertyId}'].put").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/properties/{propertyId}'].delete").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/properties/{propertyId}/status'].patch").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/files/upload'].post").exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/files/upload'].post.requestBody.content['multipart/form-data']"
+                ).exists())
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"));
     }

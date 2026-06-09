@@ -17,6 +17,10 @@ spring:
     properties:
       hibernate:
         format_sql: true
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_SIZE:10MB}
+      max-request-size: ${MAX_UPLOAD_REQUEST_SIZE:11MB}
 
 server:
   port: ${SERVER_PORT:8081}
@@ -27,6 +31,14 @@ app:
       secret: ${JWT_SECRET}
       access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:PT30M}
       refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:P30D}
+  storage:
+    local-root: ${LOCAL_STORAGE_ROOT:./var/storage}
+    max-file-size: ${MAX_UPLOAD_SIZE:10MB}
+    allowed-content-types:
+      - image/jpeg
+      - image/png
+      - image/webp
+      - application/pdf
 
 springdoc:
   api-docs:

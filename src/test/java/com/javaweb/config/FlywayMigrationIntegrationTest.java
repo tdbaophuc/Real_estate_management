@@ -25,7 +25,7 @@ class FlywayMigrationIntegrationTest {
     void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("create property schema and seed master data");
+                .isEqualTo("create file resources");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -54,6 +54,7 @@ class FlywayMigrationIntegrationTest {
                 "property_amenities",
                 "property_images",
                 "property_legal_documents",
+                "file_resources",
                 "flyway_schema_history"
         );
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM roles", Integer.class))

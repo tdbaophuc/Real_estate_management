@@ -33,6 +33,10 @@ class OpenApiIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/v1/auth/refresh-token'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/auth/logout'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/auth/me'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/admin/users'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/admin/users/{userId}'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/admin/users/{userId}/status'].patch").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/admin/users/{userId}/roles'].put").exists())
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"));
     }

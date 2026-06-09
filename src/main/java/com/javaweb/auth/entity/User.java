@@ -81,6 +81,11 @@ public class User {
         roles.add(role);
     }
 
+    public void replaceRoles(Set<Role> roles) {
+        this.roles.clear();
+        this.roles.addAll(roles);
+    }
+
     public Long getId() {
         return id;
     }

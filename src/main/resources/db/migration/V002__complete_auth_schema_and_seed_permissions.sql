@@ -1,0 +1,52 @@
+CREATE TABLE refresh_tokens (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    token_hash VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    revoked_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_refresh_tokens PRIMARY KEY (id),
+    CONSTRAINT uk_refresh_tokens_hash UNIQUE (token_hash),
+    CONSTRAINT fk_refresh_tokens_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens (user_id);
+CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens (expires_at);
+
+CREATE TABLE otp_tokens (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    token_hash VARCHAR(255) NOT NULL,
+    token_type VARCHAR(30) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    consumed_at TIMESTAMP NULL,
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_otp_tokens PRIMARY KEY (id),
+    CONSTRAINT uk_otp_tokens_hash UNIQUE (token_hash),
+    CONSTRAINT fk_otp_tokens_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_otp_tokens_user_type ON otp_tokens (user_id, token_type);
+CREATE INDEX idx_otp_tokens_expires_at ON otp_tokens (expires_at);
+
+INSERT INTO permissions (code, name, description)
+VALUES
+    ('USER_READ', 'Read users', 'View user accounts and profiles'),
+    ('USER_MANAGE', 'Manage users', 'Create, update, lock and unlock user accounts'),
+    ('ROLE_READ', 'Read roles', 'View roles and their assigned permissions'),
+    ('ROLE_MANAGE', 'Manage roles', 'Assign roles and maintain role definitions'),
+    ('PERMISSION_READ', 'Read permissions', 'View system permission definitions'),
+    ('PERMISSION_MANAGE', 'Manage permissions', 'Assign permissions to roles');
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT roles.id, permissions.id
+FROM roles
+CROSS JOIN permissions
+WHERE roles.code = 'ADMIN';
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT roles.id, permissions.id
+FROM roles
+JOIN permissions ON permissions.code IN ('USER_READ', 'ROLE_READ', 'PERMISSION_READ')
+WHERE roles.code = 'MANAGER';

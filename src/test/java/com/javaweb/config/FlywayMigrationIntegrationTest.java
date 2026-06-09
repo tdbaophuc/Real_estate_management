@@ -24,7 +24,8 @@ class FlywayMigrationIntegrationTest {
     @Test
     void shouldApplyAuthBaselineMigration() {
         assertThat(flyway.info().current()).isNotNull();
-        assertThat(flyway.info().current().getDescription()).isEqualTo("init auth schema");
+        assertThat(flyway.info().current().getDescription())
+                .isEqualTo("complete auth schema and seed permissions");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -41,9 +42,48 @@ class FlywayMigrationIntegrationTest {
                 "permissions",
                 "user_roles",
                 "role_permissions",
+                "refresh_tokens",
+                "otp_tokens",
                 "flyway_schema_history"
         );
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM roles", Integer.class))
                 .isEqualTo(5);
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT code FROM roles ORDER BY code",
+                String.class
+        )).containsExactly("ADMIN", "AGENT", "CUSTOMER", "MANAGER", "OWNER");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM permissions", Integer.class))
+                .isEqualTo(6);
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT code FROM permissions ORDER BY code",
+                String.class
+        )).containsExactly(
+                "PERMISSION_MANAGE",
+                "PERMISSION_READ",
+                "ROLE_MANAGE",
+                "ROLE_READ",
+                "USER_MANAGE",
+                "USER_READ"
+        );
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM role_permissions
+                JOIN roles ON roles.id = role_permissions.role_id
+                WHERE roles.code = 'ADMIN'
+                """,
+                Integer.class
+        )).isEqualTo(6);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM role_permissions
+                JOIN roles ON roles.id = role_permissions.role_id
+                WHERE roles.code = 'MANAGER'
+                """,
+                Integer.class
+        )).isEqualTo(3);
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM users", Integer.class))
+                .isZero();
     }
 }

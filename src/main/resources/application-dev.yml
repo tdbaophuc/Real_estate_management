@@ -7,3 +7,11 @@ spring:
     baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:true}
   jpa:
     show-sql: true
+
+app:
+  seed:
+    admin:
+      enabled: ${DEV_ADMIN_ENABLED:false}
+      email: ${DEV_ADMIN_EMAIL:admin@realestate.local}
+      password: ${DEV_ADMIN_PASSWORD:}
+      full-name: ${DEV_ADMIN_FULL_NAME:Development Administrator}

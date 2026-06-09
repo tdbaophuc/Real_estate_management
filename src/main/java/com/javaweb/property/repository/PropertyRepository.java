@@ -1,0 +1,43 @@
+package com.javaweb.property.repository;
+
+import com.javaweb.property.entity.Property;
+import com.javaweb.property.enums.PropertyPurpose;
+import com.javaweb.property.enums.PropertyStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
+public interface PropertyRepository extends JpaRepository<Property, Long> {
+    Optional<Property> findByCode(String code);
+
+    boolean existsByCode(String code);
+
+    @EntityGraph(attributePaths = {
+            "propertyType",
+            "address",
+            "address.province",
+            "address.district",
+            "address.ward",
+            "owner",
+            "createdBy",
+            "assignedAgent"
+    })
+    Optional<Property> findWithCoreDetailsById(Long id);
+
+    Page<Property> findAllByPropertyTypeIdAndStatusAndDeletedAtIsNull(
+            Long propertyTypeId,
+            PropertyStatus status,
+            Pageable pageable
+    );
+
+    Page<Property> findAllByPurposeAndStatusAndDeletedAtIsNull(
+            PropertyPurpose purpose,
+            PropertyStatus status,
+            Pageable pageable
+    );
+
+    Page<Property> findAllByCreatedByIdAndDeletedAtIsNull(Long createdById, Pageable pageable);
+}

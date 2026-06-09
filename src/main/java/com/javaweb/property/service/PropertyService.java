@@ -9,9 +9,11 @@ import com.javaweb.auth.security.AuthUserPrincipal;
 import com.javaweb.common.exception.BusinessException;
 import com.javaweb.common.exception.DuplicateResourceException;
 import com.javaweb.common.exception.ResourceNotFoundException;
+import com.javaweb.common.response.PageResponse;
 import com.javaweb.property.dto.PropertyAmenityRequest;
 import com.javaweb.property.dto.PropertyResponse;
 import com.javaweb.property.dto.PropertyUpsertRequest;
+import com.javaweb.property.dto.UpdatePropertyStatusRequest;
 import com.javaweb.property.entity.Address;
 import com.javaweb.property.entity.Amenity;
 import com.javaweb.property.entity.District;
@@ -20,6 +22,7 @@ import com.javaweb.property.entity.PropertyAmenity;
 import com.javaweb.property.entity.PropertyType;
 import com.javaweb.property.entity.Province;
 import com.javaweb.property.entity.Ward;
+import com.javaweb.property.enums.PropertyStatus;
 import com.javaweb.property.mapper.PropertyMapper;
 import com.javaweb.property.repository.AmenityRepository;
 import com.javaweb.property.repository.DistrictRepository;
@@ -27,10 +30,14 @@ import com.javaweb.property.repository.PropertyRepository;
 import com.javaweb.property.repository.PropertyTypeRepository;
 import com.javaweb.property.repository.ProvinceRepository;
 import com.javaweb.property.repository.WardRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,6 +48,29 @@ import java.util.stream.Collectors;
 
 @Service
 public class PropertyService {
+    private static final Set<String> ALLOWED_SORT_FIELDS =
+            Set.of("id", "code", "name", "status", "price", "createdAt", "updatedAt");
+    private static final Map<PropertyStatus, Set<PropertyStatus>> ALLOWED_STATUS_TRANSITIONS =
+            Map.of(
+                    PropertyStatus.DRAFT, Set.of(PropertyStatus.AVAILABLE, PropertyStatus.INACTIVE),
+                    PropertyStatus.AVAILABLE, Set.of(
+                            PropertyStatus.RESERVED,
+                            PropertyStatus.SOLD,
+                            PropertyStatus.RENTED,
+                            PropertyStatus.INACTIVE
+                    ),
+                    PropertyStatus.RESERVED, Set.of(
+                            PropertyStatus.AVAILABLE,
+                            PropertyStatus.SOLD,
+                            PropertyStatus.RENTED,
+                            PropertyStatus.INACTIVE
+                    ),
+                    PropertyStatus.SOLD, Set.of(PropertyStatus.INACTIVE),
+                    PropertyStatus.RENTED, Set.of(PropertyStatus.AVAILABLE, PropertyStatus.INACTIVE),
+                    PropertyStatus.INACTIVE, Set.of(PropertyStatus.DRAFT, PropertyStatus.AVAILABLE),
+                    PropertyStatus.DELETED, Set.of()
+            );
+
     private final PropertyRepository propertyRepository;
     private final PropertyTypeRepository propertyTypeRepository;
     private final AmenityRepository amenityRepository;
@@ -114,7 +144,7 @@ public class PropertyService {
     ) {
         Property property = propertyRepository.findWithUpdateDetailsById(propertyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Property not found"));
-        requireCanUpdate(property, actor);
+        requireCanModify(property, actor);
         if (property.getDeletedAt() != null) {
             throw new BusinessException("Deleted properties cannot be updated");
         }
@@ -145,6 +175,81 @@ public class PropertyService {
         reconcileAmenities(property, amenities);
 
         return propertyMapper.toResponse(propertyRepository.saveAndFlush(property));
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<PropertyResponse> list(
+            int page,
+            int size,
+            String sortBy,
+            Sort.Direction direction,
+            AuthUserPrincipal actor
+    ) {
+        String safeSortBy = requireAllowedSortField(sortBy);
+        PageRequest pageable = PageRequest.of(page, size, Sort.by(direction, safeSortBy));
+        Page<Property> propertyPage = isManagerOrAdmin(actor)
+                ? propertyRepository.findAllByDeletedAtIsNull(pageable)
+                : propertyRepository.findAllVisibleToAgent(actor.id(), pageable);
+
+        List<Long> ids = propertyPage.getContent().stream()
+                .map(Property::getId)
+                .toList();
+        Map<Long, Property> propertiesById = ids.isEmpty()
+                ? Map.of()
+                : propertyRepository.findAllWithDetailsByIdIn(ids).stream()
+                        .collect(Collectors.toMap(
+                                Property::getId,
+                                Function.identity(),
+                                (left, right) -> left,
+                                LinkedHashMap::new
+                        ));
+        List<PropertyResponse> content = ids.stream()
+                .map(propertiesById::get)
+                .map(propertyMapper::toResponse)
+                .toList();
+
+        return PageResponse.from(propertyPage, content);
+    }
+
+    @Transactional(readOnly = true)
+    public PropertyResponse get(Long propertyId, AuthUserPrincipal actor) {
+        Property property = propertyRepository.findActiveDetailsById(propertyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Property not found"));
+        requireCanRead(property, actor);
+        return propertyMapper.toResponse(property);
+    }
+
+    @Transactional
+    public void delete(Long propertyId, AuthUserPrincipal actor) {
+        Property property = requireActivePropertyForModification(propertyId);
+        requireCanModify(property, actor);
+        property.setStatus(PropertyStatus.DELETED);
+        property.setDeletedAt(Instant.now());
+    }
+
+    @Transactional
+    public PropertyResponse updateStatus(
+            Long propertyId,
+            UpdatePropertyStatusRequest request,
+            AuthUserPrincipal actor
+    ) {
+        Property property = requireActivePropertyForModification(propertyId);
+        requireCanModify(property, actor);
+        PropertyStatus requestedStatus = request.status();
+        if (requestedStatus == PropertyStatus.DELETED) {
+            throw new BusinessException("Use the delete endpoint to delete a property");
+        }
+        if (property.getStatus() != requestedStatus
+                && !ALLOWED_STATUS_TRANSITIONS.get(property.getStatus()).contains(requestedStatus)) {
+            throw new BusinessException(
+                    "Property status cannot transition from "
+                            + property.getStatus()
+                            + " to "
+                            + requestedStatus
+            );
+        }
+        property.setStatus(requestedStatus);
+        return propertyMapper.toResponse(property);
     }
 
     private PropertyType requirePropertyType(Long propertyTypeId) {
@@ -238,12 +343,42 @@ public class PropertyService {
                 .orElseThrow(() -> new ResourceNotFoundException(message));
     }
 
-    private void requireCanUpdate(Property property, AuthUserPrincipal actor) {
+    private Property requireActivePropertyForModification(Long propertyId) {
+        Property property = propertyRepository.findWithUpdateDetailsById(propertyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Property not found"));
+        if (property.getDeletedAt() != null) {
+            throw new ResourceNotFoundException("Property not found");
+        }
+        return property;
+    }
+
+    private String requireAllowedSortField(String sortBy) {
+        if (!ALLOWED_SORT_FIELDS.contains(sortBy)) {
+            throw new BusinessException("Unsupported property sort field");
+        }
+        return sortBy;
+    }
+
+    private void requireCanRead(Property property, AuthUserPrincipal actor) {
+        if (isManagerOrAdmin(actor)) {
+            return;
+        }
+        boolean createdByActor = property.getCreatedBy().getId().equals(actor.id());
+        boolean assignedToActor = property.getAssignedAgent() != null
+                && property.getAssignedAgent().getId().equals(actor.id());
+        if (!createdByActor && !assignedToActor) {
+            throw new AccessDeniedException(
+                    "Agents can only view properties they created or are assigned"
+            );
+        }
+    }
+
+    private void requireCanModify(Property property, AuthUserPrincipal actor) {
         if (isManagerOrAdmin(actor)) {
             return;
         }
         if (!property.getCreatedBy().getId().equals(actor.id())) {
-            throw new AccessDeniedException("Agents can only update properties they created");
+            throw new AccessDeniedException("Agents can only modify properties they created");
         }
     }
 

@@ -1,0 +1,244 @@
+CREATE TABLE contract_templates (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    code VARCHAR(100) NOT NULL,
+    name VARCHAR(200) NOT NULL,
+    contract_type VARCHAR(30) NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    content_template TEXT NOT NULL,
+    description VARCHAR(1000),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_contract_templates PRIMARY KEY (id),
+    CONSTRAINT uk_contract_templates_code_version UNIQUE (code, version),
+    CONSTRAINT fk_contract_templates_created_by
+        FOREIGN KEY (created_by) REFERENCES users (id),
+    CONSTRAINT ck_contract_templates_type CHECK (
+        contract_type IN ('SALE', 'LEASE')
+    ),
+    CONSTRAINT ck_contract_templates_version CHECK (version > 0)
+);
+
+CREATE INDEX idx_contract_templates_type_active
+    ON contract_templates (contract_type, active);
+
+CREATE TABLE contracts (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    code VARCHAR(50) NOT NULL,
+    template_id BIGINT,
+    property_id BIGINT NOT NULL,
+    customer_id BIGINT NOT NULL,
+    owner_id BIGINT NOT NULL,
+    agent_id BIGINT NOT NULL,
+    created_by BIGINT NOT NULL,
+    contract_type VARCHAR(30) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
+    title VARCHAR(250) NOT NULL,
+    total_value DECIMAL(19, 2),
+    currency VARCHAR(3) NOT NULL DEFAULT 'VND',
+    effective_date DATE,
+    expiration_date DATE,
+    terms TEXT,
+    notes VARCHAR(2000),
+    submitted_at TIMESTAMP NULL,
+    approved_at TIMESTAMP NULL,
+    signed_at TIMESTAMP NULL,
+    activated_at TIMESTAMP NULL,
+    cancelled_at TIMESTAMP NULL,
+    terminated_at TIMESTAMP NULL,
+    cancellation_reason VARCHAR(1000),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_contracts PRIMARY KEY (id),
+    CONSTRAINT uk_contracts_code UNIQUE (code),
+    CONSTRAINT fk_contracts_template
+        FOREIGN KEY (template_id) REFERENCES contract_templates (id)
+            ON DELETE SET NULL,
+    CONSTRAINT fk_contracts_property
+        FOREIGN KEY (property_id) REFERENCES properties (id),
+    CONSTRAINT fk_contracts_customer
+        FOREIGN KEY (customer_id) REFERENCES customers (id),
+    CONSTRAINT fk_contracts_owner
+        FOREIGN KEY (owner_id) REFERENCES users (id),
+    CONSTRAINT fk_contracts_agent
+        FOREIGN KEY (agent_id) REFERENCES users (id),
+    CONSTRAINT fk_contracts_created_by
+        FOREIGN KEY (created_by) REFERENCES users (id),
+    CONSTRAINT ck_contracts_type CHECK (
+        contract_type IN ('SALE', 'LEASE')
+    ),
+    CONSTRAINT ck_contracts_status CHECK (
+        status IN (
+            'DRAFT',
+            'PENDING_REVIEW',
+            'PENDING_SIGNATURE',
+            'SIGNED',
+            'ACTIVE',
+            'EXPIRED',
+            'CANCELLED',
+            'TERMINATED'
+        )
+    ),
+    CONSTRAINT ck_contracts_value CHECK (
+        total_value IS NULL OR total_value >= 0
+    ),
+    CONSTRAINT ck_contracts_dates CHECK (
+        expiration_date IS NULL
+        OR effective_date IS NULL
+        OR expiration_date >= effective_date
+    ),
+    CONSTRAINT ck_contracts_cancelled CHECK (
+        (status = 'CANCELLED'
+            AND cancelled_at IS NOT NULL
+            AND cancellation_reason IS NOT NULL)
+        OR status <> 'CANCELLED'
+    ),
+    CONSTRAINT ck_contracts_terminated CHECK (
+        (status = 'TERMINATED' AND terminated_at IS NOT NULL)
+        OR status <> 'TERMINATED'
+    ),
+    CONSTRAINT ck_contracts_signed CHECK (
+        status NOT IN ('SIGNED', 'ACTIVE', 'EXPIRED')
+        OR signed_at IS NOT NULL
+    ),
+    CONSTRAINT ck_contracts_active CHECK (
+        status <> 'ACTIVE' OR activated_at IS NOT NULL
+    )
+);
+
+CREATE INDEX idx_contracts_property_status
+    ON contracts (property_id, status);
+CREATE INDEX idx_contracts_customer_status
+    ON contracts (customer_id, status);
+CREATE INDEX idx_contracts_owner_status
+    ON contracts (owner_id, status);
+CREATE INDEX idx_contracts_agent_status
+    ON contracts (agent_id, status);
+CREATE INDEX idx_contracts_dates
+    ON contracts (effective_date, expiration_date);
+
+CREATE TABLE contract_parties (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    contract_id BIGINT NOT NULL,
+    user_id BIGINT,
+    customer_id BIGINT,
+    party_role VARCHAR(30) NOT NULL,
+    full_name VARCHAR(150) NOT NULL,
+    email VARCHAR(255),
+    phone VARCHAR(30),
+    identity_number VARCHAR(100),
+    tax_number VARCHAR(100),
+    address VARCHAR(500),
+    signing_order INTEGER NOT NULL DEFAULT 1,
+    required_signer BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_contract_parties PRIMARY KEY (id),
+    CONSTRAINT fk_contract_parties_contract
+        FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE CASCADE,
+    CONSTRAINT fk_contract_parties_user
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL,
+    CONSTRAINT fk_contract_parties_customer
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE SET NULL,
+    CONSTRAINT ck_contract_parties_role CHECK (
+        party_role IN (
+            'BUYER',
+            'SELLER',
+            'TENANT',
+            'LANDLORD',
+            'AGENT',
+            'WITNESS',
+            'OTHER'
+        )
+    ),
+    CONSTRAINT ck_contract_parties_signing_order CHECK (signing_order > 0)
+);
+
+CREATE INDEX idx_contract_parties_contract_role
+    ON contract_parties (contract_id, party_role);
+CREATE INDEX idx_contract_parties_user
+    ON contract_parties (user_id);
+CREATE INDEX idx_contract_parties_customer
+    ON contract_parties (customer_id);
+
+CREATE TABLE contract_documents (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    contract_id BIGINT NOT NULL,
+    file_resource_id BIGINT NOT NULL,
+    uploaded_by BIGINT NOT NULL,
+    document_type VARCHAR(30) NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    display_name VARCHAR(255) NOT NULL,
+    description VARCHAR(1000),
+    primary_document BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_contract_documents PRIMARY KEY (id),
+    CONSTRAINT uk_contract_documents_file UNIQUE (file_resource_id),
+    CONSTRAINT uk_contract_documents_version
+        UNIQUE (contract_id, document_type, version),
+    CONSTRAINT fk_contract_documents_contract
+        FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE CASCADE,
+    CONSTRAINT fk_contract_documents_file
+        FOREIGN KEY (file_resource_id) REFERENCES file_resources (id),
+    CONSTRAINT fk_contract_documents_uploaded_by
+        FOREIGN KEY (uploaded_by) REFERENCES users (id),
+    CONSTRAINT ck_contract_documents_type CHECK (
+        document_type IN ('DRAFT', 'FINAL', 'SIGNED', 'ATTACHMENT')
+    ),
+    CONSTRAINT ck_contract_documents_version CHECK (version > 0)
+);
+
+CREATE INDEX idx_contract_documents_contract_created
+    ON contract_documents (contract_id, created_at);
+
+CREATE TABLE contract_signatures (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    contract_party_id BIGINT NOT NULL,
+    contract_document_id BIGINT,
+    signer_user_id BIGINT,
+    signature_method VARCHAR(30) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+    provider_name VARCHAR(100),
+    provider_signature_id VARCHAR(255),
+    signature_data VARCHAR(4000),
+    signed_at TIMESTAMP NULL,
+    declined_at TIMESTAMP NULL,
+    decline_reason VARCHAR(1000),
+    ip_address VARCHAR(64),
+    user_agent VARCHAR(1000),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_contract_signatures PRIMARY KEY (id),
+    CONSTRAINT uk_contract_signatures_party_document
+        UNIQUE (contract_party_id, contract_document_id),
+    CONSTRAINT fk_contract_signatures_party
+        FOREIGN KEY (contract_party_id) REFERENCES contract_parties (id)
+            ON DELETE CASCADE,
+    CONSTRAINT fk_contract_signatures_document
+        FOREIGN KEY (contract_document_id) REFERENCES contract_documents (id)
+            ON DELETE SET NULL,
+    CONSTRAINT fk_contract_signatures_signer
+        FOREIGN KEY (signer_user_id) REFERENCES users (id) ON DELETE SET NULL,
+    CONSTRAINT ck_contract_signatures_method CHECK (
+        signature_method IN ('ELECTRONIC', 'UPLOADED', 'WET_INK')
+    ),
+    CONSTRAINT ck_contract_signatures_status CHECK (
+        status IN ('PENDING', 'SIGNED', 'DECLINED', 'VOIDED')
+    ),
+    CONSTRAINT ck_contract_signatures_timing CHECK (
+        (status = 'SIGNED' AND signed_at IS NOT NULL AND declined_at IS NULL)
+        OR (status = 'DECLINED'
+            AND declined_at IS NOT NULL
+            AND decline_reason IS NOT NULL
+            AND signed_at IS NULL)
+        OR (status IN ('PENDING', 'VOIDED')
+            AND signed_at IS NULL
+            AND declined_at IS NULL)
+    )
+);
+
+CREATE INDEX idx_contract_signatures_party_status
+    ON contract_signatures (contract_party_id, status);
+CREATE INDEX idx_contract_signatures_document
+    ON contract_signatures (contract_document_id);

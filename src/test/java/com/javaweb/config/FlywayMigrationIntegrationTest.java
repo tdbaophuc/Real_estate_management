@@ -175,7 +175,7 @@ class FlywayMigrationIntegrationTest {
     void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("add email reminder support");
+                .isEqualTo("create contract schema");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -227,6 +227,11 @@ class FlywayMigrationIntegrationTest {
                 "notification_templates",
                 "notifications",
                 "email_logs",
+                "contracts",
+                "contract_parties",
+                "contract_documents",
+                "contract_templates",
+                "contract_signatures",
                 "flyway_schema_history"
         );
         assertThat(jdbcTemplate.queryForList(

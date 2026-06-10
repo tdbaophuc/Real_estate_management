@@ -8,9 +8,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 
 public interface FollowUpTaskRepository extends JpaRepository<FollowUpTask, Long> {
     Page<FollowUpTask> findAllByLeadIdOrderByDueAtAsc(Long leadId, Pageable pageable);
+
+    List<FollowUpTask> findAllByLeadIdOrderByDueAtAsc(Long leadId);
 
     Page<FollowUpTask> findAllByAssignedToIdAndStatusInAndDueAtBeforeOrderByDueAtAsc(
             Long assignedToId,

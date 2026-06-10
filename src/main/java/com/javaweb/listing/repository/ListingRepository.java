@@ -37,6 +37,7 @@ public interface ListingRepository
     @EntityGraph(attributePaths = {
             "property",
             "createdBy",
+            "reviewedBy",
             "listingPackage"
     })
     Optional<Listing> findWithUpdateDetailsById(Long id);

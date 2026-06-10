@@ -29,6 +29,13 @@ public record ListingResponse(
         String seoTitle,
         String seoDescription,
         String seoKeywords,
+        Long reviewedById,
+        String reviewedByName,
+        String rejectionReason,
+        Instant submittedAt,
+        Instant reviewedAt,
+        Instant publishedAt,
+        Instant unpublishedAt,
         long viewCount,
         Instant createdAt,
         Instant updatedAt

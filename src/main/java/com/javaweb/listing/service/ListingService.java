@@ -10,6 +10,7 @@ import com.javaweb.common.exception.ResourceNotFoundException;
 import com.javaweb.listing.dto.ListingCreateRequest;
 import com.javaweb.listing.dto.ListingResponse;
 import com.javaweb.listing.dto.ListingUpdateRequest;
+import com.javaweb.listing.dto.RejectListingRequest;
 import com.javaweb.listing.entity.Listing;
 import com.javaweb.listing.entity.ListingPackage;
 import com.javaweb.listing.enums.ListingPurpose;
@@ -24,6 +25,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Set;
 
 @Service
@@ -102,12 +104,142 @@ public class ListingService {
         return listingMapper.toResponse(listingRepository.saveAndFlush(listing));
     }
 
+    @Transactional
+    public ListingResponse submit(Long listingId, AuthUserPrincipal actor) {
+        Listing listing = requireListingForWorkflow(listingId);
+        requireCanModify(listing, actor);
+        requireCurrentStatus(
+                listing,
+                Set.of(ListingStatus.DRAFT, ListingStatus.REJECTED),
+                "Only draft or rejected listings can be submitted"
+        );
+
+        User changedBy = requireActor(actor);
+        Instant now = Instant.now();
+        listing.setSubmittedAt(now);
+        listing.setReviewedAt(null);
+        listing.setReviewedBy(null);
+        listing.setRejectionReason(null);
+        transition(listing, ListingStatus.PENDING_REVIEW, changedBy, null);
+        return saveWorkflowResult(listing);
+    }
+
+    @Transactional
+    public ListingResponse approve(Long listingId, AuthUserPrincipal actor) {
+        Listing listing = requireListingForWorkflow(listingId);
+        requireCurrentStatus(
+                listing,
+                Set.of(ListingStatus.PENDING_REVIEW),
+                "Only listings pending review can be approved"
+        );
+
+        User reviewer = requireActor(actor);
+        listing.setReviewedBy(reviewer);
+        listing.setReviewedAt(Instant.now());
+        listing.setRejectionReason(null);
+        transition(listing, ListingStatus.APPROVED, reviewer, null);
+        return saveWorkflowResult(listing);
+    }
+
+    @Transactional
+    public ListingResponse reject(
+            Long listingId,
+            RejectListingRequest request,
+            AuthUserPrincipal actor
+    ) {
+        Listing listing = requireListingForWorkflow(listingId);
+        requireCurrentStatus(
+                listing,
+                Set.of(ListingStatus.PENDING_REVIEW),
+                "Only listings pending review can be rejected"
+        );
+
+        User reviewer = requireActor(actor);
+        listing.setReviewedBy(reviewer);
+        listing.setReviewedAt(Instant.now());
+        listing.setRejectionReason(request.reason());
+        transition(listing, ListingStatus.REJECTED, reviewer, request.reason());
+        return saveWorkflowResult(listing);
+    }
+
+    @Transactional
+    public ListingResponse publish(Long listingId, AuthUserPrincipal actor) {
+        Listing listing = requireListingForWorkflow(listingId);
+        requireCanModify(listing, actor);
+        requireCurrentStatus(
+                listing,
+                Set.of(ListingStatus.APPROVED, ListingStatus.UNPUBLISHED),
+                "Only approved or unpublished listings can be published"
+        );
+
+        User changedBy = requireActor(actor);
+        listing.setPublishedAt(Instant.now());
+        listing.setUnpublishedAt(null);
+        transition(listing, ListingStatus.PUBLISHED, changedBy, null);
+        return saveWorkflowResult(listing);
+    }
+
+    @Transactional
+    public ListingResponse unpublish(Long listingId, AuthUserPrincipal actor) {
+        Listing listing = requireListingForWorkflow(listingId);
+        requireCanModify(listing, actor);
+        requireCurrentStatus(
+                listing,
+                Set.of(ListingStatus.PUBLISHED),
+                "Only published listings can be unpublished"
+        );
+
+        User changedBy = requireActor(actor);
+        listing.setUnpublishedAt(Instant.now());
+        transition(listing, ListingStatus.UNPUBLISHED, changedBy, null);
+        return saveWorkflowResult(listing);
+    }
+
     private ListingPackage requireActivePackage(Long listingPackageId) {
         if (listingPackageId == null) {
             return null;
         }
         return listingPackageRepository.findByIdAndActiveTrue(listingPackageId)
                 .orElseThrow(() -> new ResourceNotFoundException("Active listing package not found"));
+    }
+
+    private Listing requireListingForWorkflow(Long listingId) {
+        Listing listing = listingRepository.findWithUpdateDetailsById(listingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Listing not found"));
+        if (listing.getDeletedAt() != null) {
+            throw new ResourceNotFoundException("Listing not found");
+        }
+        return listing;
+    }
+
+    private User requireActor(AuthUserPrincipal actor) {
+        return userRepository.findById(actor.id())
+                .orElseThrow(() -> new ResourceNotFoundException("Authenticated user not found"));
+    }
+
+    private void requireCurrentStatus(
+            Listing listing,
+            Set<ListingStatus> allowedStatuses,
+            String message
+    ) {
+        if (!allowedStatuses.contains(listing.getStatus())) {
+            throw new BusinessException(message);
+        }
+    }
+
+    private void transition(
+            Listing listing,
+            ListingStatus targetStatus,
+            User changedBy,
+            String reason
+    ) {
+        ListingStatus previousStatus = listing.getStatus();
+        listing.setStatus(targetStatus);
+        listing.addStatusHistory(previousStatus, targetStatus, changedBy, reason);
+    }
+
+    private ListingResponse saveWorkflowResult(Listing listing) {
+        return listingMapper.toResponse(listingRepository.saveAndFlush(listing));
     }
 
     private void requirePurposeMatchesProperty(ListingPurpose purpose, Property property) {

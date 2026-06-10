@@ -69,6 +69,7 @@ public class ListingMapper {
     public ListingResponse toResponse(Listing listing) {
         Property property = listing.getProperty();
         User creator = listing.getCreatedBy();
+        User reviewer = listing.getReviewedBy();
         ListingPackage listingPackage = listing.getListingPackage();
 
         return new ListingResponse(
@@ -93,6 +94,13 @@ public class ListingMapper {
                 listing.getSeoTitle(),
                 listing.getSeoDescription(),
                 listing.getSeoKeywords(),
+                reviewer == null ? null : reviewer.getId(),
+                reviewer == null ? null : reviewer.getFullName(),
+                listing.getRejectionReason(),
+                listing.getSubmittedAt(),
+                listing.getReviewedAt(),
+                listing.getPublishedAt(),
+                listing.getUnpublishedAt(),
                 listing.getViewCount(),
                 listing.getCreatedAt(),
                 listing.getUpdatedAt()

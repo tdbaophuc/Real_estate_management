@@ -10,6 +10,7 @@ import com.javaweb.common.exception.BusinessException;
 import com.javaweb.common.exception.DuplicateResourceException;
 import com.javaweb.common.exception.ResourceNotFoundException;
 import com.javaweb.common.response.PageResponse;
+import com.javaweb.commission.service.CommissionService;
 import com.javaweb.contract.entity.Contract;
 import com.javaweb.contract.enums.ContractStatus;
 import com.javaweb.contract.enums.ContractType;
@@ -93,6 +94,7 @@ public class TransactionService {
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
     private final TransactionMapper mapper;
+    private final CommissionService commissionService;
 
     public TransactionService(
             TransactionRepository transactionRepository,
@@ -105,7 +107,8 @@ public class TransactionService {
             PropertyRepository propertyRepository,
             CustomerRepository customerRepository,
             UserRepository userRepository,
-            TransactionMapper mapper
+            TransactionMapper mapper,
+            CommissionService commissionService
     ) {
         this.transactionRepository = transactionRepository;
         this.depositRepository = depositRepository;
@@ -118,6 +121,7 @@ public class TransactionService {
         this.customerRepository = customerRepository;
         this.userRepository = userRepository;
         this.mapper = mapper;
+        this.commissionService = commissionService;
     }
 
     @Transactional
@@ -224,7 +228,11 @@ public class TransactionService {
             }
         }
         transaction.setStatus(request.status());
-        return mapper.toResponse(transactionRepository.saveAndFlush(transaction));
+        Transaction saved = transactionRepository.saveAndFlush(transaction);
+        if (request.status() == TransactionStatus.COMPLETED) {
+            commissionService.calculateForCompletedTransaction(saved);
+        }
+        return mapper.toResponse(saved);
     }
 
     @Transactional

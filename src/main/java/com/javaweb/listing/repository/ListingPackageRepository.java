@@ -11,5 +11,7 @@ public interface ListingPackageRepository extends JpaRepository<ListingPackage, 
 
     boolean existsByCode(String code);
 
+    Optional<ListingPackage> findByIdAndActiveTrue(Long id);
+
     List<ListingPackage> findAllByActiveTrueOrderByPriorityLevelDescNameAsc();
 }

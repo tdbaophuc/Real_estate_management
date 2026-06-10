@@ -22,6 +22,8 @@ public interface ListingRepository
 
     boolean existsBySlug(String slug);
 
+    boolean existsBySlugAndIdNot(String slug, Long id);
+
     @EntityGraph(attributePaths = {
             "property",
             "property.propertyType",
@@ -31,6 +33,13 @@ public interface ListingRepository
             "listingPackage"
     })
     Optional<Listing> findWithCoreDetailsById(Long id);
+
+    @EntityGraph(attributePaths = {
+            "property",
+            "createdBy",
+            "listingPackage"
+    })
+    Optional<Listing> findWithUpdateDetailsById(Long id);
 
     List<Listing> findAllByPropertyIdAndDeletedAtIsNullOrderByCreatedAtDesc(Long propertyId);
 

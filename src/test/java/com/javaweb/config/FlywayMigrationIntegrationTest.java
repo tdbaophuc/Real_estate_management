@@ -27,6 +27,33 @@ class FlywayMigrationIntegrationTest {
     @AfterEach
     void cleanListingSchemaTestData() {
         jdbcTemplate.update(
+                "DELETE FROM appointments WHERE code LIKE 'APPOINTMENT-MIGRATION-%'"
+        );
+        jdbcTemplate.update(
+                "DELETE FROM customers WHERE code = 'APPOINTMENT-MIGRATION-CUSTOMER'"
+        );
+        jdbcTemplate.update(
+                "DELETE FROM properties WHERE code = 'APPOINTMENT-MIGRATION-PROPERTY'"
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM addresses
+                WHERE full_address = '25 Appointment Migration Street'
+                """
+        );
+        jdbcTemplate.update(
+                "DELETE FROM provinces WHERE code = 'APPT-MIG-PROVINCE'"
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM users
+                WHERE email IN (
+                    'appointment-migration-agent@example.com',
+                    'appointment-migration-creator@example.com'
+                )
+                """
+        );
+        jdbcTemplate.update(
                 """
                 DELETE FROM leads
                 WHERE code LIKE 'LEAD-MIGRATION-%'
@@ -121,7 +148,7 @@ class FlywayMigrationIntegrationTest {
     void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("create lead pipeline schema");
+                .isEqualTo("create appointment schema");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -167,6 +194,9 @@ class FlywayMigrationIntegrationTest {
                 "lead_notes",
                 "lead_activities",
                 "follow_up_tasks",
+                "appointments",
+                "appointment_participants",
+                "viewing_feedbacks",
                 "flyway_schema_history"
         );
         assertThat(jdbcTemplate.queryForList(
@@ -334,6 +364,156 @@ class FlywayMigrationIntegrationTest {
                 """,
                 Integer.class
         )).isEqualTo(1);
+    }
+
+    @Test
+    void shouldEnforceAppointmentScheduleAndFeedbackConstraints() {
+        jdbcTemplate.update(
+                """
+                INSERT INTO users (email, password_hash, full_name, status, email_verified)
+                VALUES ('appointment-migration-agent@example.com', 'hash', 'Appointment Agent', 'ACTIVE', TRUE),
+                       ('appointment-migration-creator@example.com', 'hash', 'Appointment Creator', 'ACTIVE', TRUE)
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO provinces (code, name)
+                VALUES ('APPT-MIG-PROVINCE', 'Appointment Province')
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO addresses (province_id, street_address, full_address)
+                SELECT id, '25 Appointment Migration Street', '25 Appointment Migration Street'
+                FROM provinces
+                WHERE code = 'APPT-MIG-PROVINCE'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO properties (
+                    code,
+                    property_type_id,
+                    address_id,
+                    created_by,
+                    name,
+                    purpose
+                )
+                SELECT
+                    'APPOINTMENT-MIGRATION-PROPERTY',
+                    property_type.id,
+                    address.id,
+                    creator.id,
+                    'Appointment Migration Property',
+                    'SALE'
+                FROM property_types property_type
+                CROSS JOIN addresses address
+                CROSS JOIN users creator
+                WHERE property_type.code = 'APARTMENT'
+                  AND address.full_address = '25 Appointment Migration Street'
+                  AND creator.email = 'appointment-migration-creator@example.com'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO customers (code, created_by, full_name, phone)
+                SELECT
+                    'APPOINTMENT-MIGRATION-CUSTOMER',
+                    id,
+                    'Appointment Migration Customer',
+                    '0900000025'
+                FROM users
+                WHERE email = 'appointment-migration-creator@example.com'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO appointments (
+                    code,
+                    customer_id,
+                    agent_id,
+                    property_id,
+                    created_by,
+                    title,
+                    start_at,
+                    end_at
+                )
+                SELECT
+                    'APPOINTMENT-MIGRATION-VALID',
+                    customer.id,
+                    agent.id,
+                    property.id,
+                    creator.id,
+                    'Migration viewing',
+                    TIMESTAMP '2030-01-01 09:00:00',
+                    TIMESTAMP '2030-01-01 10:00:00'
+                FROM customers customer
+                CROSS JOIN users agent
+                CROSS JOIN properties property
+                CROSS JOIN users creator
+                WHERE customer.code = 'APPOINTMENT-MIGRATION-CUSTOMER'
+                  AND agent.email = 'appointment-migration-agent@example.com'
+                  AND property.code = 'APPOINTMENT-MIGRATION-PROPERTY'
+                  AND creator.email = 'appointment-migration-creator@example.com'
+                """
+        );
+
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT status
+                FROM appointments
+                WHERE code = 'APPOINTMENT-MIGRATION-VALID'
+                """,
+                String.class
+        )).isEqualTo("PENDING");
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO appointments (
+                    code,
+                    customer_id,
+                    agent_id,
+                    property_id,
+                    created_by,
+                    title,
+                    start_at,
+                    end_at
+                )
+                SELECT
+                    'APPOINTMENT-MIGRATION-TIME',
+                    customer.id,
+                    agent.id,
+                    property.id,
+                    creator.id,
+                    'Invalid viewing',
+                    TIMESTAMP '2030-01-01 10:00:00',
+                    TIMESTAMP '2030-01-01 09:00:00'
+                FROM customers customer
+                CROSS JOIN users agent
+                CROSS JOIN properties property
+                CROSS JOIN users creator
+                WHERE customer.code = 'APPOINTMENT-MIGRATION-CUSTOMER'
+                  AND agent.email = 'appointment-migration-agent@example.com'
+                  AND property.code = 'APPOINTMENT-MIGRATION-PROPERTY'
+                  AND creator.email = 'appointment-migration-creator@example.com'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO viewing_feedbacks (
+                    appointment_id,
+                    submitted_by,
+                    rating,
+                    interest_level
+                )
+                SELECT appointment.id, creator.id, 6, 'HIGH'
+                FROM appointments appointment
+                CROSS JOIN users creator
+                WHERE appointment.code = 'APPOINTMENT-MIGRATION-VALID'
+                  AND creator.email = 'appointment-migration-creator@example.com'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

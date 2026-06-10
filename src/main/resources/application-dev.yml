@@ -18,3 +18,5 @@ app:
       email: ${DEV_ADMIN_EMAIL:admin@realestate.local}
       password: ${DEV_ADMIN_PASSWORD:}
       full-name: ${DEV_ADMIN_FULL_NAME:Development Administrator}
+  reminders:
+    enabled: ${REMINDERS_ENABLED:true}

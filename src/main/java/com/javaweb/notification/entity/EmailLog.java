@@ -63,6 +63,12 @@ public class EmailLog extends AuditableEntity {
     @Column(name = "failed_at")
     private Instant failedAt;
 
+    @Column(name = "reference_type", length = 100)
+    private String referenceType;
+
+    @Column(name = "reference_id")
+    private Long referenceId;
+
     protected EmailLog() {
     }
 
@@ -170,5 +176,21 @@ public class EmailLog extends AuditableEntity {
 
     public void setFailedAt(Instant failedAt) {
         this.failedAt = failedAt;
+    }
+
+    public String getReferenceType() {
+        return referenceType;
+    }
+
+    public void setReferenceType(String referenceType) {
+        this.referenceType = referenceType;
+    }
+
+    public Long getReferenceId() {
+        return referenceId;
+    }
+
+    public void setReferenceId(Long referenceId) {
+        this.referenceId = referenceId;
     }
 }

@@ -175,7 +175,7 @@ class FlywayMigrationIntegrationTest {
     void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("create notification schema");
+                .isEqualTo("add email reminder support");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -485,6 +485,35 @@ class FlywayMigrationIntegrationTest {
                 """,
                 String.class
         )).isEqualTo("PENDING");
+        assertThat(jdbcTemplate.queryForList(
+                """
+                SELECT code
+                FROM notification_templates
+                WHERE code IN (
+                    'APPOINTMENT_REMINDER_EMAIL',
+                    'FOLLOW_UP_REMINDER_EMAIL'
+                )
+                ORDER BY code
+                """,
+                String.class
+        )).containsExactly(
+                "APPOINTMENT_REMINDER_EMAIL",
+                "FOLLOW_UP_REMINDER_EMAIL"
+        );
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'PUBLIC'
+                  AND (
+                      (table_name = 'FOLLOW_UP_TASKS'
+                          AND column_name = 'REMINDER_SENT_AT')
+                      OR (table_name = 'EMAIL_LOGS'
+                          AND column_name IN ('REFERENCE_TYPE', 'REFERENCE_ID'))
+                  )
+                """,
+                Integer.class
+        )).isEqualTo(3);
 
         assertThatThrownBy(() -> jdbcTemplate.update(
                 """

@@ -39,6 +39,13 @@ app:
       - image/png
       - image/webp
       - application/pdf
+  reminders:
+    enabled: false
+    cron: ${REMINDER_CRON:0 */5 * * * *}
+    zone: ${REMINDER_ZONE:UTC}
+    appointment-look-ahead: ${APPOINTMENT_REMINDER_LOOK_AHEAD:PT24H}
+    follow-up-look-ahead: ${FOLLOW_UP_REMINDER_LOOK_AHEAD:PT24H}
+    batch-size: ${REMINDER_BATCH_SIZE:100}
 
 springdoc:
   api-docs:

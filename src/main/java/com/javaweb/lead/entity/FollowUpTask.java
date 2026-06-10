@@ -57,6 +57,9 @@ public class FollowUpTask extends AuditableEntity {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    @Column(name = "reminder_sent_at")
+    private Instant reminderSentAt;
+
     protected FollowUpTask() {
     }
 
@@ -137,5 +140,13 @@ public class FollowUpTask extends AuditableEntity {
 
     public void setCompletedAt(Instant completedAt) {
         this.completedAt = completedAt;
+    }
+
+    public Instant getReminderSentAt() {
+        return reminderSentAt;
+    }
+
+    public void setReminderSentAt(Instant reminderSentAt) {
+        this.reminderSentAt = reminderSentAt;
     }
 }

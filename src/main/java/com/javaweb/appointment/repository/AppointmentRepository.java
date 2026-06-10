@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface AppointmentRepository
@@ -31,6 +32,13 @@ public interface AppointmentRepository
 
     Page<Appointment> findAllByCreatedByIdOrderByStartAtDesc(
             Long createdById,
+            Pageable pageable
+    );
+
+    List<Appointment> findAllByReminderSentAtIsNullAndStatusInAndStartAtBetweenOrderByStartAtAsc(
+            Collection<AppointmentStatus> statuses,
+            Instant startAt,
+            Instant endAt,
             Pageable pageable
     );
 

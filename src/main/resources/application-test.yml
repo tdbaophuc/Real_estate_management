@@ -22,3 +22,5 @@ app:
       refresh-token-expiration: P30D
   storage:
     local-root: target/test-storage
+  reminders:
+    enabled: false

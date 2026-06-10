@@ -21,4 +21,11 @@ public interface FollowUpTaskRepository extends JpaRepository<FollowUpTask, Long
             Instant dueAt,
             Pageable pageable
     );
+
+    List<FollowUpTask> findAllByReminderSentAtIsNullAndStatusInAndDueAtBetweenOrderByDueAtAsc(
+            Collection<FollowUpTaskStatus> statuses,
+            Instant startAt,
+            Instant endAt,
+            Pageable pageable
+    );
 }

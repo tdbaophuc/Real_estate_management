@@ -13,3 +13,7 @@ springdoc:
     enabled: ${OPENAPI_ENABLED:false}
   swagger-ui:
     enabled: ${SWAGGER_UI_ENABLED:false}
+
+app:
+  reminders:
+    enabled: ${REMINDERS_ENABLED:false}

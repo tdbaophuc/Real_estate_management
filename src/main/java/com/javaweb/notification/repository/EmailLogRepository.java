@@ -11,4 +11,11 @@ public interface EmailLogRepository extends JpaRepository<EmailLog, Long> {
             EmailDeliveryStatus status,
             Pageable pageable
     );
+
+    boolean existsByTemplateIdAndRecipientEmailIgnoreCaseAndReferenceTypeAndReferenceId(
+            Long templateId,
+            String recipientEmail,
+            String referenceType,
+            Long referenceId
+    );
 }

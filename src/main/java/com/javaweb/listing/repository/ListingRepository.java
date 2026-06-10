@@ -8,6 +8,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -17,6 +20,20 @@ public interface ListingRepository
     Optional<Listing> findByCode(String code);
 
     Optional<Listing> findBySlugAndDeletedAtIsNull(String slug);
+
+    @EntityGraph(attributePaths = {
+            "property",
+            "property.propertyType",
+            "property.address",
+            "property.address.province",
+            "property.address.district",
+            "property.address.ward"
+    })
+    Optional<Listing> findBySlugAndStatusAndVisibilityAndDeletedAtIsNull(
+            String slug,
+            ListingStatus status,
+            ListingVisibility visibility
+    );
 
     boolean existsByCode(String code);
 
@@ -51,4 +68,12 @@ public interface ListingRepository
             ListingVisibility visibility,
             Pageable pageable
     );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update Listing listing
+            set listing.viewCount = listing.viewCount + 1
+            where listing.id = :listingId
+            """)
+    int incrementViewCount(@Param("listingId") Long listingId);
 }

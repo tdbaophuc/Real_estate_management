@@ -1,0 +1,23 @@
+CREATE TABLE file_resources (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    uploaded_by BIGINT NOT NULL,
+    original_file_name VARCHAR(255) NOT NULL,
+    storage_key VARCHAR(500) NOT NULL,
+    content_type VARCHAR(100) NOT NULL,
+    file_size BIGINT NOT NULL,
+    checksum_sha256 VARCHAR(64) NOT NULL,
+    storage_provider VARCHAR(30) NOT NULL,
+    access_level VARCHAR(30) NOT NULL,
+    public_url VARCHAR(1000),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_file_resources PRIMARY KEY (id),
+    CONSTRAINT uk_file_resources_storage_key UNIQUE (storage_key),
+    CONSTRAINT fk_file_resources_uploaded_by FOREIGN KEY (uploaded_by) REFERENCES users (id),
+    CONSTRAINT ck_file_resources_file_size CHECK (file_size > 0)
+);
+
+CREATE INDEX idx_file_resources_uploaded_by_created_at
+    ON file_resources (uploaded_by, created_at);
+
+CREATE INDEX idx_file_resources_access_level
+    ON file_resources (access_level);

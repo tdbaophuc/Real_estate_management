@@ -1,0 +1,182 @@
+CREATE TABLE listing_packages (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    code VARCHAR(50) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description VARCHAR(500),
+    price DECIMAL(19, 2) NOT NULL DEFAULT 0,
+    currency VARCHAR(3) NOT NULL DEFAULT 'VND',
+    duration_days INTEGER NOT NULL,
+    featured BOOLEAN NOT NULL DEFAULT FALSE,
+    priority_level INTEGER NOT NULL DEFAULT 0,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_listing_packages PRIMARY KEY (id),
+    CONSTRAINT uk_listing_packages_code UNIQUE (code),
+    CONSTRAINT ck_listing_packages_price CHECK (price >= 0),
+    CONSTRAINT ck_listing_packages_duration CHECK (duration_days > 0),
+    CONSTRAINT ck_listing_packages_priority CHECK (priority_level >= 0)
+);
+
+CREATE INDEX idx_listing_packages_active_priority
+    ON listing_packages (active, priority_level);
+
+CREATE TABLE listings (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    code VARCHAR(50) NOT NULL,
+    property_id BIGINT NOT NULL,
+    created_by BIGINT NOT NULL,
+    reviewed_by BIGINT,
+    listing_package_id BIGINT,
+    title VARCHAR(250) NOT NULL,
+    slug VARCHAR(300) NOT NULL,
+    description TEXT NOT NULL,
+    purpose VARCHAR(30) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
+    visibility VARCHAR(20) NOT NULL DEFAULT 'PUBLIC',
+    asking_price DECIMAL(19, 2),
+    currency VARCHAR(3) NOT NULL DEFAULT 'VND',
+    seo_title VARCHAR(250),
+    seo_description VARCHAR(500),
+    seo_keywords VARCHAR(500),
+    rejection_reason VARCHAR(1000),
+    submitted_at TIMESTAMP NULL,
+    reviewed_at TIMESTAMP NULL,
+    published_at TIMESTAMP NULL,
+    unpublished_at TIMESTAMP NULL,
+    expires_at TIMESTAMP NULL,
+    featured_until TIMESTAMP NULL,
+    view_count BIGINT NOT NULL DEFAULT 0,
+    deleted_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_listings PRIMARY KEY (id),
+    CONSTRAINT uk_listings_code UNIQUE (code),
+    CONSTRAINT uk_listings_slug UNIQUE (slug),
+    CONSTRAINT fk_listings_property FOREIGN KEY (property_id) REFERENCES properties (id),
+    CONSTRAINT fk_listings_created_by FOREIGN KEY (created_by) REFERENCES users (id),
+    CONSTRAINT fk_listings_reviewed_by FOREIGN KEY (reviewed_by) REFERENCES users (id),
+    CONSTRAINT fk_listings_package FOREIGN KEY (listing_package_id) REFERENCES listing_packages (id),
+    CONSTRAINT ck_listings_purpose CHECK (purpose IN ('SALE', 'RENT')),
+    CONSTRAINT ck_listings_status CHECK (
+        status IN (
+            'DRAFT',
+            'PENDING_REVIEW',
+            'APPROVED',
+            'REJECTED',
+            'PUBLISHED',
+            'UNPUBLISHED',
+            'EXPIRED',
+            'SOLD',
+            'RENTED'
+        )
+    ),
+    CONSTRAINT ck_listings_visibility CHECK (visibility IN ('PUBLIC', 'INTERNAL', 'PRIVATE')),
+    CONSTRAINT ck_listings_asking_price CHECK (asking_price IS NULL OR asking_price >= 0),
+    CONSTRAINT ck_listings_view_count CHECK (view_count >= 0),
+    CONSTRAINT ck_listings_review CHECK (
+        status <> 'REJECTED' OR rejection_reason IS NOT NULL
+    ),
+    CONSTRAINT ck_listings_expiry CHECK (
+        expires_at IS NULL OR published_at IS NULL OR expires_at >= published_at
+    ),
+    CONSTRAINT ck_listings_featured_until CHECK (
+        featured_until IS NULL OR published_at IS NULL OR featured_until >= published_at
+    )
+);
+
+CREATE INDEX idx_listings_property ON listings (property_id);
+CREATE INDEX idx_listings_status_visibility ON listings (status, visibility);
+CREATE INDEX idx_listings_purpose_status_price ON listings (purpose, status, asking_price);
+CREATE INDEX idx_listings_package_status ON listings (listing_package_id, status);
+CREATE INDEX idx_listings_created_by_status ON listings (created_by, status);
+CREATE INDEX idx_listings_published_at ON listings (published_at);
+CREATE INDEX idx_listings_expires_at ON listings (expires_at);
+
+CREATE TABLE listing_status_histories (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    listing_id BIGINT NOT NULL,
+    from_status VARCHAR(30),
+    to_status VARCHAR(30) NOT NULL,
+    changed_by BIGINT,
+    reason VARCHAR(1000),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_listing_status_histories PRIMARY KEY (id),
+    CONSTRAINT fk_listing_status_histories_listing
+        FOREIGN KEY (listing_id) REFERENCES listings (id) ON DELETE CASCADE,
+    CONSTRAINT fk_listing_status_histories_changed_by
+        FOREIGN KEY (changed_by) REFERENCES users (id),
+    CONSTRAINT ck_listing_status_histories_from_status CHECK (
+        from_status IS NULL OR from_status IN (
+            'DRAFT',
+            'PENDING_REVIEW',
+            'APPROVED',
+            'REJECTED',
+            'PUBLISHED',
+            'UNPUBLISHED',
+            'EXPIRED',
+            'SOLD',
+            'RENTED'
+        )
+    ),
+    CONSTRAINT ck_listing_status_histories_to_status CHECK (
+        to_status IN (
+            'DRAFT',
+            'PENDING_REVIEW',
+            'APPROVED',
+            'REJECTED',
+            'PUBLISHED',
+            'UNPUBLISHED',
+            'EXPIRED',
+            'SOLD',
+            'RENTED'
+        )
+    ),
+    CONSTRAINT ck_listing_status_histories_changed CHECK (
+        from_status IS NULL OR from_status <> to_status
+    )
+);
+
+CREATE INDEX idx_listing_status_histories_listing_created
+    ON listing_status_histories (listing_id, created_at);
+CREATE INDEX idx_listing_status_histories_to_status
+    ON listing_status_histories (to_status, created_at);
+
+CREATE TABLE listing_views (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    listing_id BIGINT NOT NULL,
+    viewer_id BIGINT,
+    session_id VARCHAR(100),
+    ip_hash VARCHAR(64),
+    user_agent VARCHAR(500),
+    referrer_url VARCHAR(1000),
+    viewed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_listing_views PRIMARY KEY (id),
+    CONSTRAINT fk_listing_views_listing
+        FOREIGN KEY (listing_id) REFERENCES listings (id) ON DELETE CASCADE,
+    CONSTRAINT fk_listing_views_viewer
+        FOREIGN KEY (viewer_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_listing_views_listing_viewed
+    ON listing_views (listing_id, viewed_at);
+CREATE INDEX idx_listing_views_viewer_viewed
+    ON listing_views (viewer_id, viewed_at);
+CREATE INDEX idx_listing_views_session
+    ON listing_views (session_id);
+
+CREATE TABLE listing_favorites (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    listing_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_listing_favorites PRIMARY KEY (id),
+    CONSTRAINT uk_listing_favorites_listing_user UNIQUE (listing_id, user_id),
+    CONSTRAINT fk_listing_favorites_listing
+        FOREIGN KEY (listing_id) REFERENCES listings (id) ON DELETE CASCADE,
+    CONSTRAINT fk_listing_favorites_user
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_listing_favorites_user_created
+    ON listing_favorites (user_id, created_at);

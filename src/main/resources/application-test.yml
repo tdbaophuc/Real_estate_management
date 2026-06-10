@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:real_estate_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  flyway:
+    baseline-on-migrate: false
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+  sql:
+    init:
+      mode: never
+
+app:
+  security:
+    jwt:
+      secret: dGVzdC1vbmx5LWp3dC1zZWNyZXQtbXVzdC1iZS1hdC1sZWFzdC0zMi1ieXRlcw==
+      access-token-expiration: PT30M
+      refresh-token-expiration: P30D
+  storage:
+    local-root: target/test-storage

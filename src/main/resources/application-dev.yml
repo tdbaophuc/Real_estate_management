@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/estate-base-test}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+  flyway:
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:true}
+  jpa:
+    show-sql: true
+
+app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:ZGV2LW9ubHktand0LXNlY3JldC1tdXN0LWJlLWF0LWxlYXN0LTMyLWJ5dGVz}
+  seed:
+    admin:
+      enabled: ${DEV_ADMIN_ENABLED:false}
+      email: ${DEV_ADMIN_EMAIL:admin@realestate.local}
+      password: ${DEV_ADMIN_PASSWORD:}
+      full-name: ${DEV_ADMIN_FULL_NAME:Development Administrator}

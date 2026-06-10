@@ -1,7 +1,11 @@
 package com.javaweb.customException;
 
-public class FiedRequireException extends RuntimeException {
+import com.javaweb.common.exception.BaseException;
+import com.javaweb.common.exception.ErrorCode;
+import org.springframework.http.HttpStatus;
+
+public class FiedRequireException extends BaseException {
     public FiedRequireException(String e) {
-        super(e);
+        super(ErrorCode.VALIDATION_ERROR, e, HttpStatus.BAD_REQUEST);
     }
 }

@@ -17,7 +17,11 @@ public interface CustomerRepository
 
     boolean existsByCode(String code);
 
+    boolean existsByCodeAndIdNot(String code, Long id);
+
     boolean existsByUserId(Long userId);
+
+    boolean existsByUserIdAndIdNot(Long userId, Long id);
 
     Page<Customer> findAllByStatusAndDeletedAtIsNull(
             CustomerStatus status,

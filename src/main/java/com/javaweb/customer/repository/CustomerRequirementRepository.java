@@ -10,4 +10,6 @@ public interface CustomerRequirementRepository
     List<CustomerRequirement> findAllByCustomerIdAndActiveTrueOrderByCreatedAtDesc(
             Long customerId
     );
+
+    List<CustomerRequirement> findAllByCustomerIdOrderByCreatedAtDesc(Long customerId);
 }

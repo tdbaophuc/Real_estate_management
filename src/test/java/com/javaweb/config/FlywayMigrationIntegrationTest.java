@@ -28,6 +28,21 @@ class FlywayMigrationIntegrationTest {
     void cleanListingSchemaTestData() {
         jdbcTemplate.update(
                 """
+                DELETE FROM leads
+                WHERE code LIKE 'LEAD-MIGRATION-%'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM users
+                WHERE email IN (
+                    'lead-migration-agent@example.com',
+                    'lead-migration-creator@example.com'
+                )
+                """
+        );
+        jdbcTemplate.update(
+                """
                 DELETE FROM customer_favorite_listings
                 WHERE customer_id IN (
                     SELECT id FROM customers WHERE code LIKE 'CUSTOMER-MIGRATION-%'
@@ -106,7 +121,7 @@ class FlywayMigrationIntegrationTest {
     void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("create customer schema");
+                .isEqualTo("create lead pipeline schema");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -146,7 +161,25 @@ class FlywayMigrationIntegrationTest {
                 "customer_tags",
                 "customer_notes",
                 "customer_favorite_listings",
+                "lead_sources",
+                "leads",
+                "lead_assignments",
+                "lead_notes",
+                "lead_activities",
+                "follow_up_tasks",
                 "flyway_schema_history"
+        );
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT code FROM lead_sources ORDER BY code",
+                String.class
+        )).containsExactly(
+                "CHATBOT",
+                "IMPORT",
+                "LISTING_INQUIRY",
+                "MANUAL",
+                "OTHER",
+                "REFERRAL",
+                "WEBSITE"
         );
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM roles", Integer.class))
                 .isEqualTo(5);
@@ -301,6 +334,99 @@ class FlywayMigrationIntegrationTest {
                 """,
                 Integer.class
         )).isEqualTo(1);
+    }
+
+    @Test
+    void shouldEnforceLeadPipelineConstraints() {
+        jdbcTemplate.update(
+                """
+                INSERT INTO users (email, password_hash, full_name, status, email_verified)
+                VALUES ('lead-migration-agent@example.com', 'hash', 'Lead Agent', 'ACTIVE', TRUE),
+                       ('lead-migration-creator@example.com', 'hash', 'Lead Creator', 'ACTIVE', TRUE)
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO leads (
+                    code,
+                    source_id,
+                    current_assignee_id,
+                    created_by,
+                    full_name,
+                    phone,
+                    status,
+                    score
+                )
+                SELECT
+                    'LEAD-MIGRATION-VALID',
+                    source.id,
+                    agent.id,
+                    creator.id,
+                    'Migration Prospect',
+                    '0900000023',
+                    'ASSIGNED',
+                    80
+                FROM lead_sources source
+                CROSS JOIN users agent
+                CROSS JOIN users creator
+                WHERE source.code = 'WEBSITE'
+                  AND agent.email = 'lead-migration-agent@example.com'
+                  AND creator.email = 'lead-migration-creator@example.com'
+                """
+        );
+
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT status
+                FROM leads
+                WHERE code = 'LEAD-MIGRATION-VALID'
+                """,
+                String.class
+        )).isEqualTo("ASSIGNED");
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO leads (code, source_id, full_name, phone, status)
+                SELECT 'LEAD-MIGRATION-STATUS', id, 'Invalid Status', '0900000024', 'QUALIFIED'
+                FROM lead_sources
+                WHERE code = 'MANUAL'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO leads (code, source_id, full_name, phone, score)
+                SELECT 'LEAD-MIGRATION-SCORE', id, 'Invalid Score', '0900000025', 101
+                FROM lead_sources
+                WHERE code = 'MANUAL'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO follow_up_tasks (
+                    lead_id,
+                    assigned_to,
+                    created_by,
+                    title,
+                    status,
+                    due_at
+                )
+                SELECT
+                    lead.id,
+                    agent.id,
+                    creator.id,
+                    'Invalid completed task',
+                    'COMPLETED',
+                    CURRENT_TIMESTAMP
+                FROM leads lead
+                CROSS JOIN users agent
+                CROSS JOIN users creator
+                WHERE lead.code = 'LEAD-MIGRATION-VALID'
+                  AND agent.email = 'lead-migration-agent@example.com'
+                  AND creator.email = 'lead-migration-creator@example.com'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

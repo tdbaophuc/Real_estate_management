@@ -13,4 +13,11 @@ public interface ContractDocumentRepository extends JpaRepository<ContractDocume
             Long contractId,
             ContractDocumentType documentType
     );
+
+    boolean existsByContractId(Long contractId);
+
+    boolean existsByContractIdAndDocumentType(
+            Long contractId,
+            ContractDocumentType documentType
+    );
 }

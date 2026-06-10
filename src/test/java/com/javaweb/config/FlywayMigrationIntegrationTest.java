@@ -27,6 +27,33 @@ class FlywayMigrationIntegrationTest {
     @AfterEach
     void cleanListingSchemaTestData() {
         jdbcTemplate.update(
+                """
+                DELETE FROM email_logs
+                WHERE recipient_email = 'notification-migration@example.com'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM notifications
+                WHERE recipient_id IN (
+                    SELECT id FROM users
+                    WHERE email = 'notification-migration@example.com'
+                )
+                """
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM notification_templates
+                WHERE code LIKE 'NOTIFICATION-MIGRATION-%'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM users
+                WHERE email = 'notification-migration@example.com'
+                """
+        );
+        jdbcTemplate.update(
                 "DELETE FROM appointments WHERE code LIKE 'APPOINTMENT-MIGRATION-%'"
         );
         jdbcTemplate.update(
@@ -148,7 +175,7 @@ class FlywayMigrationIntegrationTest {
     void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("create appointment schema");
+                .isEqualTo("create notification schema");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -197,6 +224,9 @@ class FlywayMigrationIntegrationTest {
                 "appointments",
                 "appointment_participants",
                 "viewing_feedbacks",
+                "notification_templates",
+                "notifications",
+                "email_logs",
                 "flyway_schema_history"
         );
         assertThat(jdbcTemplate.queryForList(
@@ -364,6 +394,122 @@ class FlywayMigrationIntegrationTest {
                 """,
                 Integer.class
         )).isEqualTo(1);
+    }
+
+    @Test
+    void shouldCreateNotificationAndEmailSkeletonWithConstraints() {
+        jdbcTemplate.update(
+                """
+                INSERT INTO users (email, password_hash, full_name, status, email_verified)
+                VALUES (
+                    'notification-migration@example.com',
+                    'hash',
+                    'Notification Recipient',
+                    'ACTIVE',
+                    TRUE
+                )
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO notification_templates (
+                    code,
+                    name,
+                    channel,
+                    subject_template,
+                    body_template
+                )
+                VALUES (
+                    'NOTIFICATION-MIGRATION-EMAIL',
+                    'Migration email template',
+                    'EMAIL',
+                    'Appointment reminder',
+                    'Your appointment starts soon'
+                )
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO notifications (
+                    recipient_id,
+                    notification_type,
+                    title,
+                    message
+                )
+                SELECT
+                    id,
+                    'APPOINTMENT_REMINDER',
+                    'Upcoming appointment',
+                    'Your appointment starts in one hour'
+                FROM users
+                WHERE email = 'notification-migration@example.com'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO email_logs (
+                    template_id,
+                    recipient_user_id,
+                    recipient_email,
+                    subject,
+                    body
+                )
+                SELECT
+                    template.id,
+                    recipient.id,
+                    recipient.email,
+                    'Appointment reminder',
+                    'Your appointment starts soon'
+                FROM notification_templates template
+                CROSS JOIN users recipient
+                WHERE template.code = 'NOTIFICATION-MIGRATION-EMAIL'
+                  AND recipient.email = 'notification-migration@example.com'
+                """
+        );
+
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM notifications notification
+                JOIN users recipient ON recipient.id = notification.recipient_id
+                WHERE recipient.email = 'notification-migration@example.com'
+                  AND notification.read_at IS NULL
+                """,
+                Integer.class
+        )).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT status
+                FROM email_logs
+                WHERE recipient_email = 'notification-migration@example.com'
+                """,
+                String.class
+        )).isEqualTo("PENDING");
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO notification_templates (
+                    code,
+                    name,
+                    channel,
+                    body_template
+                )
+                VALUES (
+                    'NOTIFICATION-MIGRATION-INVALID',
+                    'Invalid email template',
+                    'EMAIL',
+                    'Missing subject'
+                )
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                UPDATE email_logs
+                SET status = 'SENT'
+                WHERE recipient_email = 'notification-migration@example.com'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

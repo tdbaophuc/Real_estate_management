@@ -1,0 +1,88 @@
+CREATE TABLE notification_templates (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    code VARCHAR(100) NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    channel VARCHAR(30) NOT NULL,
+    subject_template VARCHAR(500),
+    body_template VARCHAR(8000) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_notification_templates PRIMARY KEY (id),
+    CONSTRAINT uk_notification_templates_code UNIQUE (code),
+    CONSTRAINT ck_notification_templates_channel CHECK (
+        channel IN ('IN_APP', 'EMAIL')
+    ),
+    CONSTRAINT ck_notification_templates_subject CHECK (
+        channel <> 'EMAIL' OR subject_template IS NOT NULL
+    )
+);
+
+CREATE INDEX idx_notification_templates_channel_active
+    ON notification_templates (channel, active);
+
+CREATE TABLE notifications (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    recipient_id BIGINT NOT NULL,
+    template_id BIGINT,
+    notification_type VARCHAR(50) NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    message VARCHAR(4000) NOT NULL,
+    action_url VARCHAR(1000),
+    reference_type VARCHAR(100),
+    reference_id BIGINT,
+    metadata_json VARCHAR(8000),
+    read_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_notifications PRIMARY KEY (id),
+    CONSTRAINT fk_notifications_recipient
+        FOREIGN KEY (recipient_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_notifications_template
+        FOREIGN KEY (template_id) REFERENCES notification_templates (id)
+            ON DELETE SET NULL
+);
+
+CREATE INDEX idx_notifications_recipient_read_created
+    ON notifications (recipient_id, read_at, created_at);
+CREATE INDEX idx_notifications_reference
+    ON notifications (reference_type, reference_id);
+
+CREATE TABLE email_logs (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    template_id BIGINT,
+    recipient_user_id BIGINT,
+    recipient_email VARCHAR(255) NOT NULL,
+    subject VARCHAR(500) NOT NULL,
+    body VARCHAR(8000) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+    provider_message_id VARCHAR(255),
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    last_error VARCHAR(4000),
+    scheduled_at TIMESTAMP NULL,
+    sent_at TIMESTAMP NULL,
+    failed_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_email_logs PRIMARY KEY (id),
+    CONSTRAINT fk_email_logs_template
+        FOREIGN KEY (template_id) REFERENCES notification_templates (id)
+            ON DELETE SET NULL,
+    CONSTRAINT fk_email_logs_recipient_user
+        FOREIGN KEY (recipient_user_id) REFERENCES users (id) ON DELETE SET NULL,
+    CONSTRAINT ck_email_logs_status CHECK (
+        status IN ('PENDING', 'SENT', 'FAILED')
+    ),
+    CONSTRAINT ck_email_logs_attempt_count CHECK (
+        attempt_count >= 0
+    ),
+    CONSTRAINT ck_email_logs_delivery_time CHECK (
+        (status = 'SENT' AND sent_at IS NOT NULL)
+        OR (status = 'FAILED' AND failed_at IS NOT NULL)
+        OR (status = 'PENDING' AND sent_at IS NULL AND failed_at IS NULL)
+    )
+);
+
+CREATE INDEX idx_email_logs_status_scheduled
+    ON email_logs (status, scheduled_at);
+CREATE INDEX idx_email_logs_recipient_created
+    ON email_logs (recipient_email, created_at);

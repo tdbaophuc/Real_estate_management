@@ -1,15 +1,18 @@
 package com.javaweb.config;
 
 import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -21,11 +24,45 @@ class FlywayMigrationIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @AfterEach
+    void cleanListingSchemaTestData() {
+        jdbcTemplate.update(
+                """
+                DELETE FROM listing_favorites
+                WHERE listing_id IN (SELECT id FROM listings WHERE code = 'LISTING-001')
+                """
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM listing_status_histories
+                WHERE listing_id IN (SELECT id FROM listings WHERE code = 'LISTING-001')
+                """
+        );
+        jdbcTemplate.update("DELETE FROM listings WHERE code = 'LISTING-001'");
+        jdbcTemplate.update("DELETE FROM properties WHERE code = 'PROPERTY-LISTING-001'");
+        jdbcTemplate.update(
+                """
+                DELETE FROM addresses
+                WHERE full_address = '16 Listing Street, Listing Province'
+                """
+        );
+        jdbcTemplate.update("DELETE FROM provinces WHERE code = 'LISTING-PROVINCE'");
+        jdbcTemplate.update(
+                """
+                DELETE FROM users
+                WHERE email IN (
+                    'listing-owner@example.com',
+                    'listing-customer@example.com'
+                )
+                """
+        );
+    }
+
     @Test
     void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("link property images to file resources");
+                .isEqualTo("create listing schema");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -55,6 +92,11 @@ class FlywayMigrationIntegrationTest {
                 "property_images",
                 "property_legal_documents",
                 "file_resources",
+                "listing_packages",
+                "listings",
+                "listing_status_histories",
+                "listing_views",
+                "listing_favorites",
                 "flyway_schema_history"
         );
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM roles", Integer.class))
@@ -143,5 +185,195 @@ class FlywayMigrationIntegrationTest {
                 """,
                 Integer.class
         )).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.table_constraints
+                WHERE table_schema = 'PUBLIC'
+                  AND table_name = 'LISTINGS'
+                  AND constraint_type = 'FOREIGN KEY'
+                """,
+                Integer.class
+        )).isEqualTo(4);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.table_constraints
+                WHERE table_schema = 'PUBLIC'
+                  AND table_name = 'LISTINGS'
+                  AND constraint_type = 'CHECK'
+                """,
+                Integer.class
+        )).isGreaterThanOrEqualTo(8);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.table_constraints
+                WHERE table_schema = 'PUBLIC'
+                  AND table_name = 'LISTING_FAVORITES'
+                  AND constraint_type = 'UNIQUE'
+                """,
+                Integer.class
+        )).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'PUBLIC'
+                  AND table_name = 'LISTINGS'
+                  AND column_name IN (
+                      'PROPERTY_ID',
+                      'STATUS',
+                      'SUBMITTED_AT',
+                      'REVIEWED_AT',
+                      'PUBLISHED_AT',
+                      'EXPIRES_AT'
+                  )
+                """,
+                Integer.class
+        )).isEqualTo(6);
+    }
+
+    @Test
+    void shouldKeepListingWorkflowSeparateFromPropertyAndEnforceListingConstraints() {
+        jdbcTemplate.update(
+                """
+                INSERT INTO users (email, password_hash, full_name, status, email_verified)
+                VALUES ('listing-owner@example.com', 'hash', 'Listing Owner', 'ACTIVE', TRUE),
+                       ('listing-customer@example.com', 'hash', 'Listing Customer', 'ACTIVE', TRUE)
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO provinces (code, name)
+                VALUES ('LISTING-PROVINCE', 'Listing Province')
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO addresses (province_id, street_address, full_address)
+                SELECT id, '16 Listing Street', '16 Listing Street, Listing Province'
+                FROM provinces
+                WHERE code = 'LISTING-PROVINCE'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO properties (
+                    code,
+                    property_type_id,
+                    address_id,
+                    created_by,
+                    name,
+                    purpose,
+                    status,
+                    price
+                )
+                SELECT
+                    'PROPERTY-LISTING-001',
+                    property_types.id,
+                    addresses.id,
+                    users.id,
+                    'Property for listing schema test',
+                    'SALE',
+                    'DRAFT',
+                    2500000000
+                FROM property_types
+                CROSS JOIN addresses
+                CROSS JOIN users
+                WHERE property_types.code = 'APARTMENT'
+                  AND addresses.full_address = '16 Listing Street, Listing Province'
+                  AND users.email = 'listing-owner@example.com'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO listings (
+                    code,
+                    property_id,
+                    created_by,
+                    title,
+                    slug,
+                    description,
+                    purpose,
+                    asking_price
+                )
+                SELECT
+                    'LISTING-001',
+                    properties.id,
+                    users.id,
+                    'Apartment for sale',
+                    'apartment-for-sale-listing-001',
+                    'Listing description',
+                    'SALE',
+                    2600000000
+                FROM properties
+                CROSS JOIN users
+                WHERE properties.code = 'PROPERTY-LISTING-001'
+                  AND users.email = 'listing-owner@example.com'
+                """
+        );
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM listings WHERE code = 'LISTING-001'",
+                String.class
+        )).isEqualTo("DRAFT");
+
+        jdbcTemplate.update(
+                """
+                INSERT INTO listing_status_histories (
+                    listing_id,
+                    from_status,
+                    to_status,
+                    changed_by,
+                    reason
+                )
+                SELECT listings.id, 'DRAFT', 'PENDING_REVIEW', users.id, 'Submitted for review'
+                FROM listings
+                CROSS JOIN users
+                WHERE listings.code = 'LISTING-001'
+                  AND users.email = 'listing-owner@example.com'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                UPDATE listings
+                SET status = 'PENDING_REVIEW', submitted_at = CURRENT_TIMESTAMP
+                WHERE code = 'LISTING-001'
+                """
+        );
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM properties WHERE code = 'PROPERTY-LISTING-001'",
+                String.class
+        )).isEqualTo("DRAFT");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM listing_status_histories WHERE to_status = 'PENDING_REVIEW'",
+                Integer.class
+        )).isEqualTo(1);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE listings SET status = 'INVALID' WHERE code = 'LISTING-001'"
+        )).isInstanceOf(DataIntegrityViolationException.class);
+
+        jdbcTemplate.update(
+                """
+                INSERT INTO listing_favorites (listing_id, user_id)
+                SELECT listings.id, users.id
+                FROM listings
+                CROSS JOIN users
+                WHERE listings.code = 'LISTING-001'
+                  AND users.email = 'listing-customer@example.com'
+                """
+        );
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO listing_favorites (listing_id, user_id)
+                SELECT listings.id, users.id
+                FROM listings
+                CROSS JOIN users
+                WHERE listings.code = 'LISTING-001'
+                  AND users.email = 'listing-customer@example.com'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
     }
 }

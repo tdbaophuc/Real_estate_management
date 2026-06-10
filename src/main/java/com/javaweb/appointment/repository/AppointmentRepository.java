@@ -29,6 +29,11 @@ public interface AppointmentRepository
             Pageable pageable
     );
 
+    Page<Appointment> findAllByCreatedByIdOrderByStartAtDesc(
+            Long createdById,
+            Pageable pageable
+    );
+
     @Query("""
             select count(appointment) > 0
             from Appointment appointment

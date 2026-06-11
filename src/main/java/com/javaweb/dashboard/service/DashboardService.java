@@ -1,7 +1,9 @@
 package com.javaweb.dashboard.service;
 
+import com.javaweb.auth.security.AuthUserPrincipal;
 import com.javaweb.commission.enums.CommissionStatus;
 import com.javaweb.dashboard.dto.AdminDashboardResponse;
+import com.javaweb.dashboard.dto.AgentDashboardResponse;
 import com.javaweb.dashboard.dto.ManagerDashboardResponse;
 import com.javaweb.dashboard.dto.StatusCountResponse;
 import com.javaweb.dashboard.repository.DashboardQueryRepository;
@@ -10,10 +12,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
 public class DashboardService {
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+
     private final DashboardQueryRepository queryRepository;
 
     public DashboardService(DashboardQueryRepository queryRepository) {
@@ -58,6 +65,31 @@ public class DashboardService {
                 queryRepository.countCommissions(CommissionStatus.PAID),
                 queryRepository.revenueSummary(),
                 queryRepository.topAgents(10)
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public AgentDashboardResponse agentDashboard(AuthUserPrincipal actor) {
+        LocalDate today = LocalDate.now(BUSINESS_ZONE);
+        Instant start = today.atStartOfDay(BUSINESS_ZONE).toInstant();
+        Instant end = today.plusDays(1).atStartOfDay(BUSINESS_ZONE).toInstant();
+        List<StatusCountResponse> leadCounts =
+                queryRepository.leadCounts(actor.id());
+        List<StatusCountResponse> transactionCounts =
+                queryRepository.activeTransactionCounts(actor.id());
+        List<StatusCountResponse> commissionCounts =
+                queryRepository.commissionCounts(actor.id());
+        return new AgentDashboardResponse(
+                total(leadCounts),
+                leadCounts,
+                queryRepository.countTodayAppointments(actor.id(), start, end),
+                queryRepository.countOpenFollowUpTasks(actor.id()),
+                queryRepository.countOverdueFollowUpTasks(actor.id(), Instant.now()),
+                total(transactionCounts),
+                transactionCounts,
+                total(commissionCounts),
+                commissionCounts,
+                queryRepository.commissionAmounts(actor.id())
         );
     }
 

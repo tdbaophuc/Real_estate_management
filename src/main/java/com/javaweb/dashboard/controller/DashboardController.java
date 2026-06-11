@@ -1,11 +1,14 @@
 package com.javaweb.dashboard.controller;
 
+import com.javaweb.auth.security.AuthUserPrincipal;
 import com.javaweb.common.response.ApiResponse;
 import com.javaweb.dashboard.dto.AdminDashboardResponse;
+import com.javaweb.dashboard.dto.AgentDashboardResponse;
 import com.javaweb.dashboard.dto.ManagerDashboardResponse;
 import com.javaweb.dashboard.service.DashboardService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,5 +33,13 @@ public class DashboardController {
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
     public ApiResponse<ManagerDashboardResponse> managerDashboard() {
         return ApiResponse.success(dashboardService.managerDashboard());
+    }
+
+    @GetMapping("/agent")
+    @PreAuthorize("hasAnyRole('AGENT', 'MANAGER', 'ADMIN')")
+    public ApiResponse<AgentDashboardResponse> agentDashboard(
+            @AuthenticationPrincipal AuthUserPrincipal actor
+    ) {
+        return ApiResponse.success(dashboardService.agentDashboard(actor));
     }
 }

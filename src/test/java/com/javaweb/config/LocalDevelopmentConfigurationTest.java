@@ -21,21 +21,21 @@ class LocalDevelopmentConfigurationTest {
         Map<String, Object> services = mapValue(compose, "services");
 
         assertThat(services).containsKeys(
-                "mysql",
+                "postgres",
                 "redis",
                 "minio",
                 "minio-init",
                 "mailhog"
         );
-        assertThat(mapValue(services, "mysql"))
-                .containsEntry("image", "mysql:8.4")
+        assertThat(mapValue(services, "postgres"))
+                .containsEntry("image", "postgres:16-alpine")
                 .containsKey("healthcheck");
         assertThat(mapValue(services, "redis"))
                 .containsEntry("image", "redis:7.4-alpine")
                 .containsKey("healthcheck");
         assertThat(mapValue(services, "minio")).containsKey("healthcheck");
         assertThat(mapValue(compose, "volumes"))
-                .containsKeys("mysql-data", "redis-data", "minio-data");
+                .containsKeys("postgres-data", "redis-data", "minio-data");
     }
 
     @Test
@@ -57,7 +57,6 @@ class LocalDevelopmentConfigurationTest {
                 "DB_NAME",
                 "DB_USERNAME",
                 "DB_PASSWORD",
-                "DB_ROOT_PASSWORD",
                 "DB_URL",
                 "MINIO_ROOT_USER",
                 "MINIO_ROOT_PASSWORD",
@@ -65,7 +64,6 @@ class LocalDevelopmentConfigurationTest {
         );
         assertThat(compose)
                 .contains("${DB_PASSWORD:?")
-                .contains("${DB_ROOT_PASSWORD:?")
                 .contains("${MINIO_ROOT_PASSWORD:?");
         assertThat(devConfig)
                 .contains("password: ${DB_PASSWORD}")

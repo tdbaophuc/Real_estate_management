@@ -9,7 +9,7 @@ audit logs.
 - Java 21 and Spring Boot 3.2
 - Spring Web, Security, Data JPA, and Validation
 - JWT access and refresh tokens
-- MySQL 8 and Flyway
+- PostgreSQL 16 and Flyway
 - OpenAPI/Swagger UI
 - JUnit 5, Spring Boot Test, and H2 for automated tests
 - Docker Compose for local infrastructure
@@ -51,7 +51,7 @@ The Compose stack provides:
 
 | Service | Local address | Purpose |
 |---|---|---|
-| MySQL | `localhost:3306` | Application database |
+| PostgreSQL | `localhost:5432` | Application database |
 | Redis | `localhost:6379` | Ready for cache/session integration |
 | MinIO API | `http://localhost:9000` | Ready for S3-compatible storage integration |
 | MinIO console | `http://localhost:9001` | Object storage administration |
@@ -61,7 +61,7 @@ The Compose stack provides:
 The `minio-init` one-shot service creates the bucket configured by
 `MINIO_BUCKET`.
 
-At Day 43, the application uses MySQL directly. File uploads still use
+The application uses PostgreSQL directly. File uploads still use
 `LOCAL_STORAGE_ROOT`, development email uses the logging sender, and Redis,
 MinIO, and MailHog are provisioned for later adapters.
 
@@ -123,17 +123,37 @@ Important environment variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `DB_URL` | Local Compose MySQL URL | JDBC URL override |
-| `DB_USERNAME` | `real_estate` | Database user |
+| `DB_URL` | `jdbc:postgresql://localhost:5432/Real_estate_management_dev` | JDBC URL override |
+| `DB_USERNAME` | `postgres` | Database user |
 | `DB_PASSWORD` | Required | Database password |
 | `JWT_SECRET` | Development-only fallback | Base64 JWT signing secret |
 | `SERVER_PORT` | `8081` | HTTP port |
 | `LOCAL_STORAGE_ROOT` | `./var/storage` | Local upload directory |
 | `MAX_UPLOAD_SIZE` | `10MB` | Maximum file size |
 | `REMINDERS_ENABLED` | `true` in dev | Scheduled reminders |
+| `AI_ENABLED` | `false` | Enables AI provider calls when a key is configured |
+| `AI_PROVIDER` | `noop` | AI provider adapter name |
+| `AI_API_KEY` | Empty | Provider API key from environment |
+| `AI_TIMEOUT` | `PT10S` | AI provider timeout |
 
 Production and UAT profiles require environment-provided credentials and disable
 development defaults.
+
+Profile database defaults:
+
+| Profile | Default JDBC URL |
+|---|---|
+| `dev` | `jdbc:postgresql://localhost:5432/Real_estate_management_dev` |
+| `uat` | `jdbc:postgresql://localhost:5432/Real_estate_management_uat` |
+| `prod` | `jdbc:postgresql://localhost:5432/Real_estate_management_pro` |
+
+The automated `test` profile keeps an in-memory H2 database in PostgreSQL mode
+for fast unit/integration tests. PostgreSQL compatibility is verified by
+Testcontainers using `Real_estate_management_test` inside the container.
+
+AI provider abstraction is present, but the default `noop` provider does not
+call an external service. Without `AI_ENABLED=true` and `AI_API_KEY`, requests
+are skipped and logged for later feature integration.
 
 ## Verification
 

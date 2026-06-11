@@ -9,6 +9,7 @@ public final class ErrorCode {
     public static final String UNAUTHORIZED = "UNAUTHORIZED";
     public static final String FORBIDDEN = "FORBIDDEN";
     public static final String FILE_UPLOAD_ERROR = "FILE_UPLOAD_ERROR";
+    public static final String AI_PROVIDER_ERROR = "AI_PROVIDER_ERROR";
     public static final String INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR";
 
     private ErrorCode() {

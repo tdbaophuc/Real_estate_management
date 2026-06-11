@@ -186,6 +186,7 @@ class PropertyListingFlowMySqlContainerIntegrationTest extends AbstractMySqlCont
         request.put("floors", 1);
         request.put("legalStatus", "PINK_BOOK");
         request.put("ownerId", owner.getId());
+        request.put("assignedAgentId", agent.getId());
         request.put("address", address);
         request.put("amenities", List.of(Map.of(
                 "amenityId",

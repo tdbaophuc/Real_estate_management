@@ -71,9 +71,6 @@ CREATE TABLE leads (
     ),
     CONSTRAINT ck_leads_score CHECK (
         score IS NULL OR (score >= 0 AND score <= 100)
-    ),
-    CONSTRAINT ck_leads_contact CHECK (
-        email IS NOT NULL OR phone IS NOT NULL OR customer_id IS NOT NULL
     )
 );
 

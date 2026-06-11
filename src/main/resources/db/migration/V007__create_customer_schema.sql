@@ -32,9 +32,6 @@ CREATE TABLE customers (
     ),
     CONSTRAINT ck_customers_priority CHECK (
         priority IN ('LOW', 'MEDIUM', 'HIGH')
-    ),
-    CONSTRAINT ck_customers_contact CHECK (
-        email IS NOT NULL OR phone IS NOT NULL OR user_id IS NOT NULL
     )
 );
 

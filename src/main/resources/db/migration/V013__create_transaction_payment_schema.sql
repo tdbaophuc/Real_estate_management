@@ -435,12 +435,11 @@ CREATE TABLE commissions (
     ),
     CONSTRAINT ck_commissions_approved CHECK (
         (status IN ('APPROVED', 'PAID')
-            AND approved_by IS NOT NULL
             AND approved_at IS NOT NULL)
         OR status NOT IN ('APPROVED', 'PAID')
     ),
     CONSTRAINT ck_commissions_paid CHECK (
-        (status = 'PAID' AND paid_by IS NOT NULL AND paid_at IS NOT NULL)
+        (status = 'PAID' AND paid_at IS NOT NULL)
         OR status <> 'PAID'
     ),
     CONSTRAINT ck_commissions_cancelled CHECK (

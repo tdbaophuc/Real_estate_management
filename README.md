@@ -1,79 +1,177 @@
-# Real Estate Management System (Backend API) 🏢
+# Real Estate Management Backend
 
-![Java](https://img.shields.io/badge/Java-21-orange.svg) ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.2.2-brightgreen.svg) ![MySQL](https://img.shields.io/badge/MySQL-Database-blue.svg) ![Architecture](https://img.shields.io/badge/Architecture-3--Tier-yellow.svg)
+REST API for managing real estate listings, CRM workflows, appointments,
+contracts, transactions, commissions, notifications, dashboards, reports, and
+audit logs.
 
-> A modern, robust RESTful API built with **Spring Boot 3** and **Java 21**, demonstrating solid foundations in Backend Engineering, Clean Architecture, and professional coding standards.
+## Technology
 
-Welcome to the **Real Estate Management System**! This repository serves as a backend application designed to manage building and real estate information efficiently. It showcases my continuous learning journey in Java Backend Development, focusing heavily on writing clean, maintainable, and scalable code.
+- Java 21 and Spring Boot 3.2
+- Spring Web, Security, Data JPA, and Validation
+- JWT access and refresh tokens
+- MySQL 8 and Flyway
+- OpenAPI/Swagger UI
+- JUnit 5, Spring Boot Test, and H2 for automated tests
+- Docker Compose for local infrastructure
 
----
+## Local Development
 
-## ✨ Key Features & Highlights
+### Prerequisites
 
-> 💡 **Learning Journey Context**: The current branch reflects the **Foundational Phase** of my learning. I intentionally used tools like Native JDBC and manual `ModelMapper` to deeply understand Java Core and Database interactions before moving to advanced abstractions. I am currently learning and actively studying **JPA, Spring Data JPA, and Spring Security**.
+- Java 21
+- Maven 3.9+
+- Docker Desktop or Docker Engine with Compose v2
 
-This project was built from the ground up without relying heavily on ORM 'magic' (like Hibernate/JPA) in this initial phase. Instead, it utilizes **Native JDBC** and **Dynamic SQL** to demonstrate a deep, fundamental understanding of how Java interacts with databases under the hood.
+### 1. Configure local environment
 
-- **Advanced Search & Filtering**: Complex dynamic queries supporting multiple search parameters (`Map<String, String>` and collections) to filter buildings by name, rent area, district, and types.
-- **RESTful API Principles**: Following standard HTTP methods (`GET`, `POST`, `DELETE`, etc.) for building management endpoints.
-- **Robust Error Handling**: Implemented a global exception handling mechanism using `@ControllerAdvice` and Custom Exceptions (e.g., `FieldRequiredException`) to return consistent, user-friendly API error responses.
-- **Data Transfer Object (DTO) Pattern**: Strict separation of concerns by using DTOs to transfer data between the client and server, preventing exposure of internal database entities using `ModelMapper`.
+Copy the example environment file:
 
-## 🏗️ Technical Stack
-
-*   **Language**: Java 21
-*   **Framework**: Spring Boot (v3.2.2) 
-    *   `spring-boot-starter-web`
-*   **Database**: MySQL (`mysql-connector-j`)
-*   **Design Patterns**:
-    *   Creational Pattern: Builder Pattern – Implemented to handle complex Search Filter objects and DTOs, ensuring Immutability and enhancing code readability.
-    *   3-Tier Architecture (Controller, Service, Repository layers)
-    *   Dependency Injection (IoC)
-    *   DTO Pattern
-*   **Utilities**: 
-    *   ModelMapper for Object Mapping
-    *   Leveraged **Java Reflection API** to dynamically traverse object fields, automating SQL generation and ensuring the system is easily extensible for new search criteria.          
-
-## 📁 Project Structure (Clean Code)
-
-The codebase is organized based on functional layers to ensure separation of concerns and maintainability.
-
-```text
-src/main/java/com/javaweb/
-├── api/                   # REST Controllers (Endpoints)
-├── config/                # Application & Bean Configurations
-├── controllerAdvice/      # Global Exception Handling
-├── converter/             # Entity <-> DTO Mapping logic
-├── customException/       # Custom defined Exception classes
-├── model/                 # Data Transfer Objects (DTOs), Requests/Responses
-├── repository/            # Data Access Layer (Interfaces)
-│   ├── entity/            # Database Entities mapping tables
-│   └── impl/              # Native JDBC / Dynamic SQL Implementations
-├── service/               # Business Logic Layer
-│   └── impl/              # Service implementations
-└── utils/                 # Utility, Helper classes (StringUtils, NumberUtils)
+```powershell
+Copy-Item .env.example .env
 ```
 
-## 💎 Built for Maintainability (Clean Code & Best Practices)
+On macOS or Linux:
 
-> 💡 **Core Mindset:** *"Code is read far more often than it is written."*  
-> Therefore, I place the highest priority on **readability, code quality, and ease of maintenance** to ensure long-term scalability and easy collaboration.
+```bash
+cp .env.example .env
+```
 
-- **Naming Conventions:** Consistent, self-documenting naming for variables, methods, and classes to minimize the need for redundant comments.
+The values in `.env` are local development credentials. Change them as needed;
+the file is ignored by Git. If you change `DB_NAME` or `DB_PORT`, update
+`DB_URL` in the same file.
 
+### 2. Start infrastructure
 
-## 🧠 Why Native JDBC First?
+```bash
+docker compose up -d
+docker compose ps
+```
 
-To truly master backend concepts, I intentionally built the data layer using **Native JDBC / Dynamic SQL** in phase 1. This hands-on approach allowed me to deeply understand Connection Pools, manual `ResultSet` mapping, and native query optimization before abstracting them away with Hibernate.
+The Compose stack provides:
 
-## 📌 Learning Roadmap & Next Steps (Actively Studying)
+| Service | Local address | Purpose |
+|---|---|---|
+| MySQL | `localhost:3306` | Application database |
+| Redis | `localhost:6379` | Ready for cache/session integration |
+| MinIO API | `http://localhost:9000` | Ready for S3-compatible storage integration |
+| MinIO console | `http://localhost:9001` | Object storage administration |
+| MailHog SMTP | `localhost:1025` | Ready for SMTP integration |
+| MailHog UI | `http://localhost:8025` | Inspect local email |
 
-Having built a solid database foundation with JDBC, my current learning focus and next implementations encompass:
+The `minio-init` one-shot service creates the bucket configured by
+`MINIO_BUCKET`.
 
-- [⏳] **Modern Data Access**: Learning and migrating to **JPA** and **Spring Data JPA** to handle complex entity relationships and caching.
-- [⏳] **API Security**: Studying **Spring Security** & **JWT (JSON Web Tokens)** to implement robust authentication and authorization.
-- [ ] **Testing**: Adding Unit Tests with **JUnit 5** and **Mockito** (`spring-boot-starter-test`).
-- [ ] **Performance**: Implementing Paging and Sorting functionality for large datasets.
+At Day 43, the application uses MySQL directly. File uploads still use
+`LOCAL_STORAGE_ROOT`, development email uses the logging sender, and Redis,
+MinIO, and MailHog are provisioned for later adapters.
 
----
-*Thank you for reviewing my project! Feel free to reach out to me for any feedback or opportunities.*
+### 3. Run the application
+
+PowerShell:
+
+```powershell
+Get-Content .env |
+  Where-Object { $_ -match '^[^#][^=]*=' } |
+  ForEach-Object {
+    $name, $value = $_ -split '=', 2
+    Set-Item -Path "Env:$name" -Value $value
+  }
+mvn spring-boot:run
+```
+
+On macOS or Linux:
+
+```bash
+set -a
+source .env
+set +a
+mvn spring-boot:run
+```
+
+Useful URLs:
+
+- API base URL: `http://localhost:8081/api/v1`
+- Swagger UI: `http://localhost:8081/swagger-ui.html`
+- OpenAPI JSON: `http://localhost:8081/v3/api-docs`
+
+The `dev` profile is active by default. Flyway applies all migrations when the
+application starts.
+
+Optional development administrator:
+
+```text
+DEV_ADMIN_ENABLED=true
+DEV_ADMIN_EMAIL=admin@realestate.local
+DEV_ADMIN_PASSWORD=<a strong local password>
+```
+
+### 4. Stop infrastructure
+
+```bash
+docker compose down
+```
+
+To also remove local database, Redis, and MinIO data:
+
+```bash
+docker compose down -v
+```
+
+## Configuration
+
+Important environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `DB_URL` | Local Compose MySQL URL | JDBC URL override |
+| `DB_USERNAME` | `real_estate` | Database user |
+| `DB_PASSWORD` | Required | Database password |
+| `JWT_SECRET` | Development-only fallback | Base64 JWT signing secret |
+| `SERVER_PORT` | `8081` | HTTP port |
+| `LOCAL_STORAGE_ROOT` | `./var/storage` | Local upload directory |
+| `MAX_UPLOAD_SIZE` | `10MB` | Maximum file size |
+| `REMINDERS_ENABLED` | `true` in dev | Scheduled reminders |
+
+Production and UAT profiles require environment-provided credentials and disable
+development defaults.
+
+## Verification
+
+Run the complete test suite:
+
+```bash
+mvn test
+```
+
+Build without running tests:
+
+```bash
+mvn -DskipTests package
+```
+
+Validate and inspect Compose after creating `.env`:
+
+```bash
+docker compose config
+docker compose ps
+```
+
+## API Documentation
+
+- Interactive documentation is available through Swagger UI while the app runs.
+- Frontend integration details are maintained in
+  [`docs/API_FRONTEND_REFERENCE.md`](docs/API_FRONTEND_REFERENCE.md).
+
+## Project Structure
+
+The backend is a modular monolith. Business modules live under
+`src/main/java/com/javaweb`, including:
+
+```text
+audit/          auth/           appointment/    commission/
+contract/       customer/       dashboard/      lead/
+listing/        notification/   property/       storage/
+transaction/    common/         config/
+```
+
+Database migrations are in `src/main/resources/db/migration`.

@@ -1,6 +1,8 @@
 package com.javaweb.listing;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.javaweb.audit.AuditActions;
+import com.javaweb.audit.repository.AuditLogRepository;
 import com.javaweb.auth.entity.Role;
 import com.javaweb.auth.entity.User;
 import com.javaweb.auth.enums.RoleCode;
@@ -62,6 +64,9 @@ class ListingReviewWorkflowIntegrationTest {
     private ListingStatusHistoryRepository statusHistoryRepository;
 
     @Autowired
+    private AuditLogRepository auditLogRepository;
+
+    @Autowired
     private PropertyRepository propertyRepository;
 
     @Autowired
@@ -91,6 +96,7 @@ class ListingReviewWorkflowIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        auditLogRepository.deleteAll();
         listingRepository.deleteAll();
         propertyRepository.deleteAll();
         provinceRepository.deleteAll();
@@ -142,6 +148,13 @@ class ListingReviewWorkflowIntegrationTest {
                 .andExpect(jsonPath("$.data.reviewedById").value(manager.getId()))
                 .andExpect(jsonPath("$.data.reviewedAt").isNotEmpty())
                 .andExpect(jsonPath("$.data.rejectionReason").doesNotExist());
+
+        assertThat(auditLogRepository
+                .findAllByActionAndResourceTypeAndResourceIdOrderByCreatedAtDesc(
+                        AuditActions.LISTING_APPROVED,
+                        AuditActions.LISTING,
+                        listing.getId()
+                )).hasSize(1);
 
         mockMvc.perform(patch("/api/v1/listings/{id}/publish", listing.getId())
                         .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
@@ -198,6 +211,18 @@ class ListingReviewWorkflowIntegrationTest {
         assertThat(rejectedHistory.getFirst().getReason())
                 .isEqualTo("Description requires legal clarification");
         assertThat(rejectedHistory.getFirst().getChangedBy().getId()).isEqualTo(admin.getId());
+        assertThat(auditLogRepository
+                .findAllByActionAndResourceTypeAndResourceIdOrderByCreatedAtDesc(
+                        AuditActions.LISTING_REJECTED,
+                        AuditActions.LISTING,
+                        listing.getId()
+                )).singleElement()
+                .satisfies(log -> {
+                    assertThat(log.getOldValueJson()).contains("PENDING_REVIEW");
+                    assertThat(log.getNewValueJson())
+                            .contains("REJECTED")
+                            .contains("Description requires legal clarification");
+                });
 
         mockMvc.perform(patch("/api/v1/listings/{id}/submit", listing.getId())
                         .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))

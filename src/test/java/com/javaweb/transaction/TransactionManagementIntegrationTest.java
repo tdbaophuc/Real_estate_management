@@ -2,6 +2,8 @@ package com.javaweb.transaction;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.javaweb.audit.AuditActions;
+import com.javaweb.audit.repository.AuditLogRepository;
 import com.javaweb.auth.entity.Role;
 import com.javaweb.auth.entity.User;
 import com.javaweb.auth.enums.RoleCode;
@@ -64,6 +66,9 @@ class TransactionManagementIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Autowired
+    private AuditLogRepository auditLogRepository;
+
+    @Autowired
     private TransactionRepository transactionRepository;
 
     @Autowired
@@ -106,6 +111,7 @@ class TransactionManagementIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        auditLogRepository.deleteAll();
         transactionRepository.deleteAll();
         contractRepository.deleteAll();
         customerRepository.deleteAll();
@@ -285,6 +291,16 @@ class TransactionManagementIntegrationTest {
                         .value("REC-D32-001"));
 
         assertThat(paymentRepository.findById(paymentId)).isPresent();
+        assertThat(auditLogRepository
+                .findAllByActionAndResourceTypeAndResourceIdOrderByCreatedAtDesc(
+                        AuditActions.TRANSACTION_STATUS_CHANGED,
+                        AuditActions.TRANSACTION,
+                        transactionId
+                )).singleElement()
+                .satisfies(log -> {
+                    assertThat(log.getOldValueJson()).contains("PAYMENT_IN_PROGRESS");
+                    assertThat(log.getNewValueJson()).contains("COMPLETED");
+                });
     }
 
     @Test

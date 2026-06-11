@@ -2,6 +2,8 @@ package com.javaweb.commission;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.javaweb.audit.AuditActions;
+import com.javaweb.audit.repository.AuditLogRepository;
 import com.javaweb.auth.entity.Role;
 import com.javaweb.auth.entity.User;
 import com.javaweb.auth.enums.RoleCode;
@@ -61,6 +63,9 @@ class CommissionManagementIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Autowired
+    private AuditLogRepository auditLogRepository;
+
+    @Autowired
     private CommissionRepository commissionRepository;
 
     @Autowired
@@ -104,6 +109,7 @@ class CommissionManagementIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        auditLogRepository.deleteAll();
         commissionRepository.deleteAll();
         ruleRepository.deleteAll();
         transactionRepository.deleteAll();
@@ -217,6 +223,18 @@ class CommissionManagementIntegrationTest {
                 .get()
                 .extracting(item -> item.getStatus().name())
                 .isEqualTo("PAID");
+        assertThat(auditLogRepository
+                .findAllByActionAndResourceTypeAndResourceIdOrderByCreatedAtDesc(
+                        AuditActions.COMMISSION_PAID,
+                        AuditActions.COMMISSION,
+                        commissionId
+                )).singleElement()
+                .satisfies(log -> {
+                    assertThat(log.getOldValueJson()).contains("PENDING");
+                    assertThat(log.getNewValueJson())
+                            .contains("PAID")
+                            .contains("COM-D33-PAY");
+                });
     }
 
     @Test

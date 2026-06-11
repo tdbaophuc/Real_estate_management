@@ -1,5 +1,7 @@
 package com.javaweb.transaction.service;
 
+import com.javaweb.audit.AuditActions;
+import com.javaweb.audit.service.AuditLogService;
 import com.javaweb.auth.entity.Role;
 import com.javaweb.auth.entity.User;
 import com.javaweb.auth.enums.RoleCode;
@@ -95,6 +97,7 @@ public class TransactionService {
     private final UserRepository userRepository;
     private final TransactionMapper mapper;
     private final CommissionService commissionService;
+    private final AuditLogService auditLogService;
 
     public TransactionService(
             TransactionRepository transactionRepository,
@@ -108,7 +111,8 @@ public class TransactionService {
             CustomerRepository customerRepository,
             UserRepository userRepository,
             TransactionMapper mapper,
-            CommissionService commissionService
+            CommissionService commissionService,
+            AuditLogService auditLogService
     ) {
         this.transactionRepository = transactionRepository;
         this.depositRepository = depositRepository;
@@ -122,6 +126,7 @@ public class TransactionService {
         this.userRepository = userRepository;
         this.mapper = mapper;
         this.commissionService = commissionService;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -210,6 +215,7 @@ public class TransactionService {
         if (request.status() == transaction.getStatus()) {
             return mapper.toResponse(transaction);
         }
+        TransactionStatus previousStatus = transaction.getStatus();
         if (TERMINAL_STATUSES.contains(request.status())) {
             requireManagement(actor);
         } else {
@@ -232,6 +238,19 @@ public class TransactionService {
         if (request.status() == TransactionStatus.COMPLETED) {
             commissionService.calculateForCompletedTransaction(saved);
         }
+        Map<String, Object> newValue = new java.util.LinkedHashMap<>();
+        newValue.put("status", request.status().name());
+        if (request.reason() != null) {
+            newValue.put("reason", request.reason());
+        }
+        auditLogService.record(
+                actor,
+                AuditActions.TRANSACTION_STATUS_CHANGED,
+                AuditActions.TRANSACTION,
+                saved.getId(),
+                Map.of("status", previousStatus.name()),
+                newValue
+        );
         return mapper.toResponse(saved);
     }
 

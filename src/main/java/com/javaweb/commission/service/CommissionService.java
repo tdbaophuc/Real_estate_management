@@ -1,5 +1,7 @@
 package com.javaweb.commission.service;
 
+import com.javaweb.audit.AuditActions;
+import com.javaweb.audit.service.AuditLogService;
 import com.javaweb.auth.entity.User;
 import com.javaweb.auth.repository.UserRepository;
 import com.javaweb.auth.security.AuthUserPrincipal;
@@ -48,19 +50,22 @@ public class CommissionService {
     private final UserRepository userRepository;
     private final CommissionCalculator calculator;
     private final CommissionMapper mapper;
+    private final AuditLogService auditLogService;
 
     public CommissionService(
             CommissionRepository commissionRepository,
             CommissionRuleRepository ruleRepository,
             UserRepository userRepository,
             CommissionCalculator calculator,
-            CommissionMapper mapper
+            CommissionMapper mapper,
+            AuditLogService auditLogService
     ) {
         this.commissionRepository = commissionRepository;
         this.ruleRepository = ruleRepository;
         this.userRepository = userRepository;
         this.calculator = calculator;
         this.mapper = mapper;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -139,6 +144,7 @@ public class CommissionService {
                         "Authenticated user not found"
                 ));
         Instant paidAt = request.paidAt() == null ? Instant.now() : request.paidAt();
+        CommissionStatus previousStatus = commission.getStatus();
         commission.setStatus(CommissionStatus.PAID);
         commission.setApprovedBy(payer);
         commission.setApprovedAt(paidAt);
@@ -146,7 +152,22 @@ public class CommissionService {
         commission.setPaidAt(paidAt);
         commission.setPaymentReference(request.paymentReference());
         commission.setNotes(request.notes());
-        return mapper.toResponse(commissionRepository.saveAndFlush(commission));
+        Commission saved = commissionRepository.saveAndFlush(commission);
+        Map<String, Object> newValue = new java.util.LinkedHashMap<>();
+        newValue.put("status", saved.getStatus().name());
+        newValue.put("paidAt", paidAt);
+        if (request.paymentReference() != null) {
+            newValue.put("paymentReference", request.paymentReference());
+        }
+        auditLogService.record(
+                actor,
+                AuditActions.COMMISSION_PAID,
+                AuditActions.COMMISSION,
+                saved.getId(),
+                Map.of("status", previousStatus.name()),
+                newValue
+        );
+        return mapper.toResponse(saved);
     }
 
     private PageResponse<CommissionResponse> search(

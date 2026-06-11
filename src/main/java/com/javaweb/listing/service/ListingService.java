@@ -1,5 +1,7 @@
 package com.javaweb.listing.service;
 
+import com.javaweb.audit.AuditActions;
+import com.javaweb.audit.service.AuditLogService;
 import com.javaweb.auth.entity.User;
 import com.javaweb.auth.enums.RoleCode;
 import com.javaweb.auth.repository.UserRepository;
@@ -26,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -38,19 +41,22 @@ public class ListingService {
     private final PropertyRepository propertyRepository;
     private final UserRepository userRepository;
     private final ListingMapper listingMapper;
+    private final AuditLogService auditLogService;
 
     public ListingService(
             ListingRepository listingRepository,
             ListingPackageRepository listingPackageRepository,
             PropertyRepository propertyRepository,
             UserRepository userRepository,
-            ListingMapper listingMapper
+            ListingMapper listingMapper,
+            AuditLogService auditLogService
     ) {
         this.listingRepository = listingRepository;
         this.listingPackageRepository = listingPackageRepository;
         this.propertyRepository = propertyRepository;
         this.userRepository = userRepository;
         this.listingMapper = listingMapper;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -134,11 +140,20 @@ public class ListingService {
         );
 
         User reviewer = requireActor(actor);
+        ListingStatus previousStatus = listing.getStatus();
         listing.setReviewedBy(reviewer);
         listing.setReviewedAt(Instant.now());
         listing.setRejectionReason(null);
         transition(listing, ListingStatus.APPROVED, reviewer, null);
-        return saveWorkflowResult(listing);
+        ListingResponse response = saveWorkflowResult(listing);
+        auditStatusChange(
+                actor,
+                AuditActions.LISTING_APPROVED,
+                listing,
+                previousStatus,
+                null
+        );
+        return response;
     }
 
     @Transactional
@@ -155,11 +170,20 @@ public class ListingService {
         );
 
         User reviewer = requireActor(actor);
+        ListingStatus previousStatus = listing.getStatus();
         listing.setReviewedBy(reviewer);
         listing.setReviewedAt(Instant.now());
         listing.setRejectionReason(request.reason());
         transition(listing, ListingStatus.REJECTED, reviewer, request.reason());
-        return saveWorkflowResult(listing);
+        ListingResponse response = saveWorkflowResult(listing);
+        auditStatusChange(
+                actor,
+                AuditActions.LISTING_REJECTED,
+                listing,
+                previousStatus,
+                request.reason()
+        );
+        return response;
     }
 
     @Transactional
@@ -240,6 +264,28 @@ public class ListingService {
 
     private ListingResponse saveWorkflowResult(Listing listing) {
         return listingMapper.toResponse(listingRepository.saveAndFlush(listing));
+    }
+
+    private void auditStatusChange(
+            AuthUserPrincipal actor,
+            String action,
+            Listing listing,
+            ListingStatus previousStatus,
+            String reason
+    ) {
+        Map<String, Object> newValue = new java.util.LinkedHashMap<>();
+        newValue.put("status", listing.getStatus().name());
+        if (reason != null) {
+            newValue.put("reason", reason);
+        }
+        auditLogService.record(
+                actor,
+                action,
+                AuditActions.LISTING,
+                listing.getId(),
+                Map.of("status", previousStatus.name()),
+                newValue
+        );
     }
 
     private void requirePurposeMatchesProperty(ListingPurpose purpose, Property property) {

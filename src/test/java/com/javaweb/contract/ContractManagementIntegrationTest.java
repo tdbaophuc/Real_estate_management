@@ -2,6 +2,8 @@ package com.javaweb.contract;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.javaweb.audit.AuditActions;
+import com.javaweb.audit.repository.AuditLogRepository;
 import com.javaweb.auth.entity.Role;
 import com.javaweb.auth.entity.User;
 import com.javaweb.auth.enums.RoleCode;
@@ -69,6 +71,9 @@ class ContractManagementIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Autowired
+    private AuditLogRepository auditLogRepository;
+
+    @Autowired
     private ContractRepository contractRepository;
 
     @Autowired
@@ -110,6 +115,7 @@ class ContractManagementIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        auditLogRepository.deleteAll();
         contractRepository.deleteAll();
         fileResourceRepository.deleteAll();
         customerRepository.deleteAll();
@@ -192,6 +198,13 @@ class ContractManagementIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("PENDING_SIGNATURE"))
                 .andExpect(jsonPath("$.data.approvedAt").isNotEmpty());
+
+        assertThat(auditLogRepository
+                .findAllByActionAndResourceTypeAndResourceIdOrderByCreatedAtDesc(
+                        AuditActions.CONTRACT_STATUS_CHANGED,
+                        AuditActions.CONTRACT,
+                        contractId
+                )).hasSize(2);
 
         mockMvc.perform(patch("/api/v1/contracts/{id}/mark-signed", contractId)
                         .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))

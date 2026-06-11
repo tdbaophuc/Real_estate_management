@@ -175,7 +175,7 @@ class FlywayMigrationIntegrationTest {
     void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("create transaction payment schema");
+                .isEqualTo("create audit log schema");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -240,6 +240,7 @@ class FlywayMigrationIntegrationTest {
                 "receipts",
                 "commissions",
                 "commission_rules",
+                "audit_logs",
                 "flyway_schema_history"
         );
         assertThat(jdbcTemplate.queryForList(

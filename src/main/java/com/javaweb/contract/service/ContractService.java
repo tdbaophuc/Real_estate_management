@@ -1,5 +1,7 @@
 package com.javaweb.contract.service;
 
+import com.javaweb.audit.AuditActions;
+import com.javaweb.audit.service.AuditLogService;
 import com.javaweb.auth.entity.Role;
 import com.javaweb.auth.entity.User;
 import com.javaweb.auth.enums.RoleCode;
@@ -74,6 +76,7 @@ public class ContractService {
     private final UserRepository userRepository;
     private final FileResourceService fileResourceService;
     private final ContractMapper contractMapper;
+    private final AuditLogService auditLogService;
 
     public ContractService(
             ContractRepository contractRepository,
@@ -83,7 +86,8 @@ public class ContractService {
             CustomerRepository customerRepository,
             UserRepository userRepository,
             FileResourceService fileResourceService,
-            ContractMapper contractMapper
+            ContractMapper contractMapper,
+            AuditLogService auditLogService
     ) {
         this.contractRepository = contractRepository;
         this.documentRepository = documentRepository;
@@ -93,6 +97,7 @@ public class ContractService {
         this.userRepository = userRepository;
         this.fileResourceService = fileResourceService;
         this.contractMapper = contractMapper;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -259,7 +264,12 @@ public class ContractService {
         }
         contract.setStatus(ContractStatus.PENDING_REVIEW);
         contract.setSubmittedAt(Instant.now());
-        return contractMapper.toResponse(contractRepository.saveAndFlush(contract));
+        return saveStatusChange(
+                contract,
+                ContractStatus.DRAFT,
+                actor,
+                null
+        );
     }
 
     @Transactional
@@ -271,9 +281,10 @@ public class ContractService {
                 ContractStatus.PENDING_REVIEW,
                 "Only contracts pending review can be approved"
         );
+        ContractStatus previousStatus = contract.getStatus();
         contract.setStatus(ContractStatus.PENDING_SIGNATURE);
         contract.setApprovedAt(Instant.now());
-        return contractMapper.toResponse(contractRepository.saveAndFlush(contract));
+        return saveStatusChange(contract, previousStatus, actor, null);
     }
 
     @Transactional
@@ -293,9 +304,10 @@ public class ContractService {
                     "A signed contract document is required before marking signed"
             );
         }
+        ContractStatus previousStatus = contract.getStatus();
         contract.setStatus(ContractStatus.SIGNED);
         contract.setSignedAt(Instant.now());
-        return contractMapper.toResponse(contractRepository.saveAndFlush(contract));
+        return saveStatusChange(contract, previousStatus, actor, null);
     }
 
     @Transactional
@@ -311,10 +323,34 @@ public class ContractService {
                     "Only draft, pending review or pending signature contracts can be cancelled"
             );
         }
+        ContractStatus previousStatus = contract.getStatus();
         contract.setStatus(ContractStatus.CANCELLED);
         contract.setCancellationReason(request.reason());
         contract.setCancelledAt(Instant.now());
-        return contractMapper.toResponse(contractRepository.saveAndFlush(contract));
+        return saveStatusChange(contract, previousStatus, actor, request.reason());
+    }
+
+    private ContractResponse saveStatusChange(
+            Contract contract,
+            ContractStatus previousStatus,
+            AuthUserPrincipal actor,
+            String reason
+    ) {
+        Contract saved = contractRepository.saveAndFlush(contract);
+        Map<String, Object> newValue = new java.util.LinkedHashMap<>();
+        newValue.put("status", saved.getStatus().name());
+        if (reason != null) {
+            newValue.put("reason", reason);
+        }
+        auditLogService.record(
+                actor,
+                AuditActions.CONTRACT_STATUS_CHANGED,
+                AuditActions.CONTRACT,
+                saved.getId(),
+                Map.of("status", previousStatus.name()),
+                newValue
+        );
+        return contractMapper.toResponse(saved);
     }
 
     private Contract requireAccessible(Long contractId, AuthUserPrincipal actor) {

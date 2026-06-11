@@ -28,6 +28,119 @@ class FlywayMigrationIntegrationTest {
     void cleanListingSchemaTestData() {
         jdbcTemplate.update(
                 """
+                DELETE FROM email_logs
+                WHERE recipient_email = 'notification-migration@example.com'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM notifications
+                WHERE recipient_id IN (
+                    SELECT id FROM users
+                    WHERE email = 'notification-migration@example.com'
+                )
+                """
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM notification_templates
+                WHERE code LIKE 'NOTIFICATION-MIGRATION-%'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM users
+                WHERE email = 'notification-migration@example.com'
+                """
+        );
+        jdbcTemplate.update(
+                "DELETE FROM appointments WHERE code LIKE 'APPOINTMENT-MIGRATION-%'"
+        );
+        jdbcTemplate.update(
+                "DELETE FROM customers WHERE code = 'APPOINTMENT-MIGRATION-CUSTOMER'"
+        );
+        jdbcTemplate.update(
+                "DELETE FROM properties WHERE code = 'APPOINTMENT-MIGRATION-PROPERTY'"
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM addresses
+                WHERE full_address = '25 Appointment Migration Street'
+                """
+        );
+        jdbcTemplate.update(
+                "DELETE FROM provinces WHERE code = 'APPT-MIG-PROVINCE'"
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM users
+                WHERE email IN (
+                    'appointment-migration-agent@example.com',
+                    'appointment-migration-creator@example.com'
+                )
+                """
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM leads
+                WHERE code LIKE 'LEAD-MIGRATION-%'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM users
+                WHERE email IN (
+                    'lead-migration-agent@example.com',
+                    'lead-migration-creator@example.com'
+                )
+                """
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM customer_favorite_listings
+                WHERE customer_id IN (
+                    SELECT id FROM customers WHERE code LIKE 'CUSTOMER-MIGRATION-%'
+                )
+                """
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM customer_notes
+                WHERE customer_id IN (
+                    SELECT id FROM customers WHERE code LIKE 'CUSTOMER-MIGRATION-%'
+                )
+                """
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM customer_tags
+                WHERE customer_id IN (
+                    SELECT id FROM customers WHERE code LIKE 'CUSTOMER-MIGRATION-%'
+                )
+                """
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM customer_requirements
+                WHERE customer_id IN (
+                    SELECT id FROM customers WHERE code LIKE 'CUSTOMER-MIGRATION-%'
+                )
+                """
+        );
+        jdbcTemplate.update(
+                "DELETE FROM customers WHERE code LIKE 'CUSTOMER-MIGRATION-%'"
+        );
+        jdbcTemplate.update(
+                """
+                DELETE FROM users
+                WHERE email IN (
+                    'customer-creator@example.com',
+                    'customer-account@example.com'
+                )
+                """
+        );
+        jdbcTemplate.update(
+                """
                 DELETE FROM listing_favorites
                 WHERE listing_id IN (SELECT id FROM listings WHERE code = 'LISTING-001')
                 """
@@ -62,7 +175,7 @@ class FlywayMigrationIntegrationTest {
     void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("create listing schema");
+                .isEqualTo("create audit log schema");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -97,7 +210,50 @@ class FlywayMigrationIntegrationTest {
                 "listing_status_histories",
                 "listing_views",
                 "listing_favorites",
+                "customers",
+                "customer_requirements",
+                "customer_tags",
+                "customer_notes",
+                "customer_favorite_listings",
+                "lead_sources",
+                "leads",
+                "lead_assignments",
+                "lead_notes",
+                "lead_activities",
+                "follow_up_tasks",
+                "appointments",
+                "appointment_participants",
+                "viewing_feedbacks",
+                "notification_templates",
+                "notifications",
+                "email_logs",
+                "contracts",
+                "contract_parties",
+                "contract_documents",
+                "contract_templates",
+                "contract_signatures",
+                "transactions",
+                "deposits",
+                "payments",
+                "payment_schedules",
+                "invoices",
+                "receipts",
+                "commissions",
+                "commission_rules",
+                "audit_logs",
                 "flyway_schema_history"
+        );
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT code FROM lead_sources ORDER BY code",
+                String.class
+        )).containsExactly(
+                "CHATBOT",
+                "IMPORT",
+                "LISTING_INQUIRY",
+                "MANUAL",
+                "OTHER",
+                "REFERRAL",
+                "WEBSITE"
         );
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM roles", Integer.class))
                 .isEqualTo(5);
@@ -232,6 +388,521 @@ class FlywayMigrationIntegrationTest {
                 """,
                 Integer.class
         )).isEqualTo(6);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.table_constraints
+                WHERE table_schema = 'PUBLIC'
+                  AND table_name = 'CUSTOMERS'
+                  AND constraint_type = 'FOREIGN KEY'
+                """,
+                Integer.class
+        )).isEqualTo(3);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.table_constraints
+                WHERE table_schema = 'PUBLIC'
+                  AND table_name = 'CUSTOMER_FAVORITE_LISTINGS'
+                  AND constraint_type = 'UNIQUE'
+                """,
+                Integer.class
+        )).isEqualTo(1);
+    }
+
+    @Test
+    void shouldCreateNotificationAndEmailSkeletonWithConstraints() {
+        jdbcTemplate.update(
+                """
+                INSERT INTO users (email, password_hash, full_name, status, email_verified)
+                VALUES (
+                    'notification-migration@example.com',
+                    'hash',
+                    'Notification Recipient',
+                    'ACTIVE',
+                    TRUE
+                )
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO notification_templates (
+                    code,
+                    name,
+                    channel,
+                    subject_template,
+                    body_template
+                )
+                VALUES (
+                    'NOTIFICATION-MIGRATION-EMAIL',
+                    'Migration email template',
+                    'EMAIL',
+                    'Appointment reminder',
+                    'Your appointment starts soon'
+                )
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO notifications (
+                    recipient_id,
+                    notification_type,
+                    title,
+                    message
+                )
+                SELECT
+                    id,
+                    'APPOINTMENT_REMINDER',
+                    'Upcoming appointment',
+                    'Your appointment starts in one hour'
+                FROM users
+                WHERE email = 'notification-migration@example.com'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO email_logs (
+                    template_id,
+                    recipient_user_id,
+                    recipient_email,
+                    subject,
+                    body
+                )
+                SELECT
+                    template.id,
+                    recipient.id,
+                    recipient.email,
+                    'Appointment reminder',
+                    'Your appointment starts soon'
+                FROM notification_templates template
+                CROSS JOIN users recipient
+                WHERE template.code = 'NOTIFICATION-MIGRATION-EMAIL'
+                  AND recipient.email = 'notification-migration@example.com'
+                """
+        );
+
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM notifications notification
+                JOIN users recipient ON recipient.id = notification.recipient_id
+                WHERE recipient.email = 'notification-migration@example.com'
+                  AND notification.read_at IS NULL
+                """,
+                Integer.class
+        )).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT status
+                FROM email_logs
+                WHERE recipient_email = 'notification-migration@example.com'
+                """,
+                String.class
+        )).isEqualTo("PENDING");
+        assertThat(jdbcTemplate.queryForList(
+                """
+                SELECT code
+                FROM notification_templates
+                WHERE code IN (
+                    'APPOINTMENT_REMINDER_EMAIL',
+                    'FOLLOW_UP_REMINDER_EMAIL'
+                )
+                ORDER BY code
+                """,
+                String.class
+        )).containsExactly(
+                "APPOINTMENT_REMINDER_EMAIL",
+                "FOLLOW_UP_REMINDER_EMAIL"
+        );
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'PUBLIC'
+                  AND (
+                      (table_name = 'FOLLOW_UP_TASKS'
+                          AND column_name = 'REMINDER_SENT_AT')
+                      OR (table_name = 'EMAIL_LOGS'
+                          AND column_name IN ('REFERENCE_TYPE', 'REFERENCE_ID'))
+                  )
+                """,
+                Integer.class
+        )).isEqualTo(3);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO notification_templates (
+                    code,
+                    name,
+                    channel,
+                    body_template
+                )
+                VALUES (
+                    'NOTIFICATION-MIGRATION-INVALID',
+                    'Invalid email template',
+                    'EMAIL',
+                    'Missing subject'
+                )
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                UPDATE email_logs
+                SET status = 'SENT'
+                WHERE recipient_email = 'notification-migration@example.com'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void shouldEnforceAppointmentScheduleAndFeedbackConstraints() {
+        jdbcTemplate.update(
+                """
+                INSERT INTO users (email, password_hash, full_name, status, email_verified)
+                VALUES ('appointment-migration-agent@example.com', 'hash', 'Appointment Agent', 'ACTIVE', TRUE),
+                       ('appointment-migration-creator@example.com', 'hash', 'Appointment Creator', 'ACTIVE', TRUE)
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO provinces (code, name)
+                VALUES ('APPT-MIG-PROVINCE', 'Appointment Province')
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO addresses (province_id, street_address, full_address)
+                SELECT id, '25 Appointment Migration Street', '25 Appointment Migration Street'
+                FROM provinces
+                WHERE code = 'APPT-MIG-PROVINCE'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO properties (
+                    code,
+                    property_type_id,
+                    address_id,
+                    created_by,
+                    name,
+                    purpose
+                )
+                SELECT
+                    'APPOINTMENT-MIGRATION-PROPERTY',
+                    property_type.id,
+                    address.id,
+                    creator.id,
+                    'Appointment Migration Property',
+                    'SALE'
+                FROM property_types property_type
+                CROSS JOIN addresses address
+                CROSS JOIN users creator
+                WHERE property_type.code = 'APARTMENT'
+                  AND address.full_address = '25 Appointment Migration Street'
+                  AND creator.email = 'appointment-migration-creator@example.com'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO customers (code, created_by, full_name, phone)
+                SELECT
+                    'APPOINTMENT-MIGRATION-CUSTOMER',
+                    id,
+                    'Appointment Migration Customer',
+                    '0900000025'
+                FROM users
+                WHERE email = 'appointment-migration-creator@example.com'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO appointments (
+                    code,
+                    customer_id,
+                    agent_id,
+                    property_id,
+                    created_by,
+                    title,
+                    start_at,
+                    end_at
+                )
+                SELECT
+                    'APPOINTMENT-MIGRATION-VALID',
+                    customer.id,
+                    agent.id,
+                    property.id,
+                    creator.id,
+                    'Migration viewing',
+                    TIMESTAMP '2030-01-01 09:00:00',
+                    TIMESTAMP '2030-01-01 10:00:00'
+                FROM customers customer
+                CROSS JOIN users agent
+                CROSS JOIN properties property
+                CROSS JOIN users creator
+                WHERE customer.code = 'APPOINTMENT-MIGRATION-CUSTOMER'
+                  AND agent.email = 'appointment-migration-agent@example.com'
+                  AND property.code = 'APPOINTMENT-MIGRATION-PROPERTY'
+                  AND creator.email = 'appointment-migration-creator@example.com'
+                """
+        );
+
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT status
+                FROM appointments
+                WHERE code = 'APPOINTMENT-MIGRATION-VALID'
+                """,
+                String.class
+        )).isEqualTo("PENDING");
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO appointments (
+                    code,
+                    customer_id,
+                    agent_id,
+                    property_id,
+                    created_by,
+                    title,
+                    start_at,
+                    end_at
+                )
+                SELECT
+                    'APPOINTMENT-MIGRATION-TIME',
+                    customer.id,
+                    agent.id,
+                    property.id,
+                    creator.id,
+                    'Invalid viewing',
+                    TIMESTAMP '2030-01-01 10:00:00',
+                    TIMESTAMP '2030-01-01 09:00:00'
+                FROM customers customer
+                CROSS JOIN users agent
+                CROSS JOIN properties property
+                CROSS JOIN users creator
+                WHERE customer.code = 'APPOINTMENT-MIGRATION-CUSTOMER'
+                  AND agent.email = 'appointment-migration-agent@example.com'
+                  AND property.code = 'APPOINTMENT-MIGRATION-PROPERTY'
+                  AND creator.email = 'appointment-migration-creator@example.com'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO viewing_feedbacks (
+                    appointment_id,
+                    submitted_by,
+                    rating,
+                    interest_level
+                )
+                SELECT appointment.id, creator.id, 6, 'HIGH'
+                FROM appointments appointment
+                CROSS JOIN users creator
+                WHERE appointment.code = 'APPOINTMENT-MIGRATION-VALID'
+                  AND creator.email = 'appointment-migration-creator@example.com'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void shouldEnforceLeadPipelineConstraints() {
+        jdbcTemplate.update(
+                """
+                INSERT INTO users (email, password_hash, full_name, status, email_verified)
+                VALUES ('lead-migration-agent@example.com', 'hash', 'Lead Agent', 'ACTIVE', TRUE),
+                       ('lead-migration-creator@example.com', 'hash', 'Lead Creator', 'ACTIVE', TRUE)
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO leads (
+                    code,
+                    source_id,
+                    current_assignee_id,
+                    created_by,
+                    full_name,
+                    phone,
+                    status,
+                    score
+                )
+                SELECT
+                    'LEAD-MIGRATION-VALID',
+                    source.id,
+                    agent.id,
+                    creator.id,
+                    'Migration Prospect',
+                    '0900000023',
+                    'ASSIGNED',
+                    80
+                FROM lead_sources source
+                CROSS JOIN users agent
+                CROSS JOIN users creator
+                WHERE source.code = 'WEBSITE'
+                  AND agent.email = 'lead-migration-agent@example.com'
+                  AND creator.email = 'lead-migration-creator@example.com'
+                """
+        );
+
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT status
+                FROM leads
+                WHERE code = 'LEAD-MIGRATION-VALID'
+                """,
+                String.class
+        )).isEqualTo("ASSIGNED");
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO leads (code, source_id, full_name, phone, status)
+                SELECT 'LEAD-MIGRATION-STATUS', id, 'Invalid Status', '0900000024', 'QUALIFIED'
+                FROM lead_sources
+                WHERE code = 'MANUAL'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO leads (code, source_id, full_name, phone, score)
+                SELECT 'LEAD-MIGRATION-SCORE', id, 'Invalid Score', '0900000025', 101
+                FROM lead_sources
+                WHERE code = 'MANUAL'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO follow_up_tasks (
+                    lead_id,
+                    assigned_to,
+                    created_by,
+                    title,
+                    status,
+                    due_at
+                )
+                SELECT
+                    lead.id,
+                    agent.id,
+                    creator.id,
+                    'Invalid completed task',
+                    'COMPLETED',
+                    CURRENT_TIMESTAMP
+                FROM leads lead
+                CROSS JOIN users agent
+                CROSS JOIN users creator
+                WHERE lead.code = 'LEAD-MIGRATION-VALID'
+                  AND agent.email = 'lead-migration-agent@example.com'
+                  AND creator.email = 'lead-migration-creator@example.com'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void shouldSupportAccountLinkedAndOfflineCustomersWithCrmConstraints() {
+        jdbcTemplate.update(
+                """
+                INSERT INTO users (email, password_hash, full_name, status, email_verified)
+                VALUES ('customer-creator@example.com', 'hash', 'Customer Creator', 'ACTIVE', TRUE),
+                       ('customer-account@example.com', 'hash', 'Customer Account', 'ACTIVE', TRUE)
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO customers (
+                    code,
+                    user_id,
+                    created_by,
+                    full_name,
+                    email,
+                    source,
+                    priority
+                )
+                SELECT
+                    'CUSTOMER-MIGRATION-LINKED',
+                    account.id,
+                    creator.id,
+                    'Linked Customer',
+                    account.email,
+                    'WEBSITE',
+                    'HIGH'
+                FROM users account
+                CROSS JOIN users creator
+                WHERE account.email = 'customer-account@example.com'
+                  AND creator.email = 'customer-creator@example.com'
+                """
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO customers (code, created_by, full_name, phone)
+                SELECT
+                    'CUSTOMER-MIGRATION-OFFLINE',
+                    id,
+                    'Offline Customer',
+                    '0900000021'
+                FROM users
+                WHERE email = 'customer-creator@example.com'
+                """
+        );
+
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM customers
+                WHERE code LIKE 'CUSTOMER-MIGRATION-%'
+                """,
+                Integer.class
+        )).isEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT user_id IS NULL
+                FROM customers
+                WHERE code = 'CUSTOMER-MIGRATION-OFFLINE'
+                """,
+                Boolean.class
+        )).isTrue();
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO customers (code, user_id, created_by, full_name, email)
+                SELECT
+                    'CUSTOMER-MIGRATION-DUPLICATE',
+                    account.id,
+                    creator.id,
+                    'Duplicate Account Customer',
+                    account.email
+                FROM users account
+                CROSS JOIN users creator
+                WHERE account.email = 'customer-account@example.com'
+                  AND creator.email = 'customer-creator@example.com'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO customer_requirements (
+                    customer_id,
+                    purpose,
+                    min_budget,
+                    max_budget
+                )
+                SELECT id, 'SALE', 5000000000, 1000000000
+                FROM customers
+                WHERE code = 'CUSTOMER-MIGRATION-LINKED'
+                """
+        )).isInstanceOf(DataIntegrityViolationException.class);
+
+        jdbcTemplate.update(
+                "DELETE FROM users WHERE email = 'customer-account@example.com'"
+        );
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT user_id IS NULL
+                FROM customers
+                WHERE code = 'CUSTOMER-MIGRATION-LINKED'
+                """,
+                Boolean.class
+        )).isTrue();
     }
 
     @Test

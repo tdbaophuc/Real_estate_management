@@ -1,0 +1,455 @@
+CREATE TABLE transactions (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    code VARCHAR(50) NOT NULL,
+    contract_id BIGINT,
+    property_id BIGINT NOT NULL,
+    customer_id BIGINT NOT NULL,
+    owner_id BIGINT NOT NULL,
+    agent_id BIGINT NOT NULL,
+    created_by BIGINT NOT NULL,
+    transaction_type VARCHAR(30) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+    agreed_value DECIMAL(19, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'VND',
+    transaction_date DATE,
+    expected_completion_date DATE,
+    completed_at TIMESTAMP NULL,
+    cancelled_at TIMESTAMP NULL,
+    refunded_at TIMESTAMP NULL,
+    cancellation_reason VARCHAR(1000),
+    notes VARCHAR(2000),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_transactions PRIMARY KEY (id),
+    CONSTRAINT uk_transactions_code UNIQUE (code),
+    CONSTRAINT uk_transactions_contract UNIQUE (contract_id),
+    CONSTRAINT fk_transactions_contract
+        FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE SET NULL,
+    CONSTRAINT fk_transactions_property
+        FOREIGN KEY (property_id) REFERENCES properties (id),
+    CONSTRAINT fk_transactions_customer
+        FOREIGN KEY (customer_id) REFERENCES customers (id),
+    CONSTRAINT fk_transactions_owner
+        FOREIGN KEY (owner_id) REFERENCES users (id),
+    CONSTRAINT fk_transactions_agent
+        FOREIGN KEY (agent_id) REFERENCES users (id),
+    CONSTRAINT fk_transactions_created_by
+        FOREIGN KEY (created_by) REFERENCES users (id),
+    CONSTRAINT ck_transactions_type CHECK (
+        transaction_type IN ('SALE', 'LEASE')
+    ),
+    CONSTRAINT ck_transactions_status CHECK (
+        status IN (
+            'PENDING',
+            'DEPOSITED',
+            'CONTRACT_SIGNED',
+            'PAYMENT_IN_PROGRESS',
+            'COMPLETED',
+            'CANCELLED',
+            'REFUNDED'
+        )
+    ),
+    CONSTRAINT ck_transactions_value CHECK (agreed_value >= 0),
+    CONSTRAINT ck_transactions_dates CHECK (
+        expected_completion_date IS NULL
+        OR transaction_date IS NULL
+        OR expected_completion_date >= transaction_date
+    ),
+    CONSTRAINT ck_transactions_completion CHECK (
+        (status = 'COMPLETED' AND completed_at IS NOT NULL)
+        OR status <> 'COMPLETED'
+    ),
+    CONSTRAINT ck_transactions_cancellation CHECK (
+        (status = 'CANCELLED'
+            AND cancelled_at IS NOT NULL
+            AND cancellation_reason IS NOT NULL)
+        OR status <> 'CANCELLED'
+    ),
+    CONSTRAINT ck_transactions_refund CHECK (
+        (status = 'REFUNDED' AND refunded_at IS NOT NULL)
+        OR status <> 'REFUNDED'
+    )
+);
+
+CREATE INDEX idx_transactions_property_status
+    ON transactions (property_id, status);
+CREATE INDEX idx_transactions_customer_status
+    ON transactions (customer_id, status);
+CREATE INDEX idx_transactions_agent_status
+    ON transactions (agent_id, status);
+CREATE INDEX idx_transactions_status_date
+    ON transactions (status, transaction_date);
+
+CREATE TABLE payment_schedules (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    transaction_id BIGINT NOT NULL,
+    installment_number INTEGER NOT NULL,
+    label VARCHAR(200) NOT NULL,
+    due_date DATE NOT NULL,
+    amount DECIMAL(19, 2) NOT NULL,
+    paid_amount DECIMAL(19, 2) NOT NULL DEFAULT 0,
+    currency VARCHAR(3) NOT NULL DEFAULT 'VND',
+    status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+    paid_at TIMESTAMP NULL,
+    notes VARCHAR(1000),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_payment_schedules PRIMARY KEY (id),
+    CONSTRAINT uk_payment_schedules_transaction_installment
+        UNIQUE (transaction_id, installment_number),
+    CONSTRAINT fk_payment_schedules_transaction
+        FOREIGN KEY (transaction_id) REFERENCES transactions (id)
+            ON DELETE CASCADE,
+    CONSTRAINT ck_payment_schedules_installment CHECK (installment_number > 0),
+    CONSTRAINT ck_payment_schedules_amount CHECK (
+        amount > 0 AND paid_amount >= 0 AND paid_amount <= amount
+    ),
+    CONSTRAINT ck_payment_schedules_status CHECK (
+        status IN ('PENDING', 'PARTIALLY_PAID', 'PAID', 'OVERDUE', 'CANCELLED')
+    ),
+    CONSTRAINT ck_payment_schedules_paid CHECK (
+        (status = 'PAID' AND paid_amount = amount AND paid_at IS NOT NULL)
+        OR status <> 'PAID'
+    )
+);
+
+CREATE INDEX idx_payment_schedules_transaction_due
+    ON payment_schedules (transaction_id, due_date);
+CREATE INDEX idx_payment_schedules_status_due
+    ON payment_schedules (status, due_date);
+
+CREATE TABLE deposits (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    transaction_id BIGINT NOT NULL,
+    received_by BIGINT NOT NULL,
+    amount DECIMAL(19, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'VND',
+    payment_method VARCHAR(30) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+    reference_number VARCHAR(100),
+    idempotency_key VARCHAR(100) NOT NULL,
+    due_date DATE,
+    received_at TIMESTAMP NULL,
+    verified_at TIMESTAMP NULL,
+    refunded_at TIMESTAMP NULL,
+    refund_amount DECIMAL(19, 2),
+    refund_reason VARCHAR(1000),
+    notes VARCHAR(1000),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_deposits PRIMARY KEY (id),
+    CONSTRAINT uk_deposits_idempotency UNIQUE (idempotency_key),
+    CONSTRAINT fk_deposits_transaction
+        FOREIGN KEY (transaction_id) REFERENCES transactions (id)
+            ON DELETE CASCADE,
+    CONSTRAINT fk_deposits_received_by
+        FOREIGN KEY (received_by) REFERENCES users (id),
+    CONSTRAINT ck_deposits_amount CHECK (
+        amount > 0
+        AND (refund_amount IS NULL
+            OR (refund_amount > 0 AND refund_amount <= amount))
+    ),
+    CONSTRAINT ck_deposits_method CHECK (
+        payment_method IN (
+            'CASH',
+            'BANK_TRANSFER',
+            'CREDIT_CARD',
+            'DEBIT_CARD',
+            'E_WALLET',
+            'OTHER'
+        )
+    ),
+    CONSTRAINT ck_deposits_status CHECK (
+        status IN ('PENDING', 'RECEIVED', 'VERIFIED', 'REFUNDED', 'CANCELLED')
+    ),
+    CONSTRAINT ck_deposits_received CHECK (
+        (status IN ('RECEIVED', 'VERIFIED', 'REFUNDED') AND received_at IS NOT NULL)
+        OR status NOT IN ('RECEIVED', 'VERIFIED', 'REFUNDED')
+    ),
+    CONSTRAINT ck_deposits_verified CHECK (
+        (status IN ('VERIFIED', 'REFUNDED') AND verified_at IS NOT NULL)
+        OR status NOT IN ('VERIFIED', 'REFUNDED')
+    ),
+    CONSTRAINT ck_deposits_refunded CHECK (
+        (status = 'REFUNDED'
+            AND refunded_at IS NOT NULL
+            AND refund_amount IS NOT NULL
+            AND refund_reason IS NOT NULL)
+        OR status <> 'REFUNDED'
+    )
+);
+
+CREATE INDEX idx_deposits_transaction_status
+    ON deposits (transaction_id, status);
+CREATE INDEX idx_deposits_reference ON deposits (reference_number);
+
+CREATE TABLE payments (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    transaction_id BIGINT NOT NULL,
+    payment_schedule_id BIGINT,
+    received_by BIGINT NOT NULL,
+    amount DECIMAL(19, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'VND',
+    payment_method VARCHAR(30) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+    reference_number VARCHAR(100),
+    idempotency_key VARCHAR(100) NOT NULL,
+    paid_at TIMESTAMP NULL,
+    confirmed_at TIMESTAMP NULL,
+    failed_at TIMESTAMP NULL,
+    refunded_at TIMESTAMP NULL,
+    refund_amount DECIMAL(19, 2),
+    failure_reason VARCHAR(1000),
+    refund_reason VARCHAR(1000),
+    notes VARCHAR(1000),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_payments PRIMARY KEY (id),
+    CONSTRAINT uk_payments_idempotency UNIQUE (idempotency_key),
+    CONSTRAINT fk_payments_transaction
+        FOREIGN KEY (transaction_id) REFERENCES transactions (id)
+            ON DELETE CASCADE,
+    CONSTRAINT fk_payments_schedule
+        FOREIGN KEY (payment_schedule_id) REFERENCES payment_schedules (id)
+            ON DELETE SET NULL,
+    CONSTRAINT fk_payments_received_by
+        FOREIGN KEY (received_by) REFERENCES users (id),
+    CONSTRAINT ck_payments_amount CHECK (
+        amount > 0
+        AND (refund_amount IS NULL
+            OR (refund_amount > 0 AND refund_amount <= amount))
+    ),
+    CONSTRAINT ck_payments_method CHECK (
+        payment_method IN (
+            'CASH',
+            'BANK_TRANSFER',
+            'CREDIT_CARD',
+            'DEBIT_CARD',
+            'E_WALLET',
+            'OTHER'
+        )
+    ),
+    CONSTRAINT ck_payments_status CHECK (
+        status IN ('PENDING', 'COMPLETED', 'FAILED', 'REFUNDED', 'CANCELLED')
+    ),
+    CONSTRAINT ck_payments_completed CHECK (
+        (status IN ('COMPLETED', 'REFUNDED')
+            AND paid_at IS NOT NULL
+            AND confirmed_at IS NOT NULL)
+        OR status NOT IN ('COMPLETED', 'REFUNDED')
+    ),
+    CONSTRAINT ck_payments_failed CHECK (
+        (status = 'FAILED' AND failed_at IS NOT NULL AND failure_reason IS NOT NULL)
+        OR status <> 'FAILED'
+    ),
+    CONSTRAINT ck_payments_refunded CHECK (
+        (status = 'REFUNDED'
+            AND refunded_at IS NOT NULL
+            AND refund_amount IS NOT NULL
+            AND refund_reason IS NOT NULL)
+        OR status <> 'REFUNDED'
+    )
+);
+
+CREATE INDEX idx_payments_transaction_status
+    ON payments (transaction_id, status);
+CREATE INDEX idx_payments_schedule ON payments (payment_schedule_id);
+CREATE INDEX idx_payments_reference ON payments (reference_number);
+
+CREATE TABLE invoices (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    transaction_id BIGINT NOT NULL,
+    issued_by BIGINT NOT NULL,
+    invoice_number VARCHAR(100) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
+    issue_date DATE NOT NULL,
+    due_date DATE,
+    subtotal DECIMAL(19, 2) NOT NULL,
+    tax_amount DECIMAL(19, 2) NOT NULL DEFAULT 0,
+    total_amount DECIMAL(19, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'VND',
+    billed_to_name VARCHAR(200) NOT NULL,
+    billed_to_email VARCHAR(255),
+    billed_to_address VARCHAR(500),
+    paid_at TIMESTAMP NULL,
+    voided_at TIMESTAMP NULL,
+    notes VARCHAR(2000),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_invoices PRIMARY KEY (id),
+    CONSTRAINT uk_invoices_number UNIQUE (invoice_number),
+    CONSTRAINT fk_invoices_transaction
+        FOREIGN KEY (transaction_id) REFERENCES transactions (id)
+            ON DELETE CASCADE,
+    CONSTRAINT fk_invoices_issued_by
+        FOREIGN KEY (issued_by) REFERENCES users (id),
+    CONSTRAINT ck_invoices_status CHECK (
+        status IN ('DRAFT', 'ISSUED', 'PARTIALLY_PAID', 'PAID', 'OVERDUE', 'VOID')
+    ),
+    CONSTRAINT ck_invoices_dates CHECK (
+        due_date IS NULL OR due_date >= issue_date
+    ),
+    CONSTRAINT ck_invoices_amount CHECK (
+        subtotal >= 0
+        AND tax_amount >= 0
+        AND total_amount = subtotal + tax_amount
+    ),
+    CONSTRAINT ck_invoices_paid CHECK (
+        (status = 'PAID' AND paid_at IS NOT NULL)
+        OR status <> 'PAID'
+    ),
+    CONSTRAINT ck_invoices_void CHECK (
+        (status = 'VOID' AND voided_at IS NOT NULL)
+        OR status <> 'VOID'
+    )
+);
+
+CREATE INDEX idx_invoices_transaction_status
+    ON invoices (transaction_id, status);
+CREATE INDEX idx_invoices_status_due ON invoices (status, due_date);
+
+CREATE TABLE receipts (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    payment_id BIGINT NOT NULL,
+    issued_by BIGINT NOT NULL,
+    receipt_number VARCHAR(100) NOT NULL,
+    issued_at TIMESTAMP NOT NULL,
+    amount DECIMAL(19, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'VND',
+    payer_name VARCHAR(200),
+    notes VARCHAR(1000),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_receipts PRIMARY KEY (id),
+    CONSTRAINT uk_receipts_payment UNIQUE (payment_id),
+    CONSTRAINT uk_receipts_number UNIQUE (receipt_number),
+    CONSTRAINT fk_receipts_payment
+        FOREIGN KEY (payment_id) REFERENCES payments (id) ON DELETE CASCADE,
+    CONSTRAINT fk_receipts_issued_by
+        FOREIGN KEY (issued_by) REFERENCES users (id),
+    CONSTRAINT ck_receipts_amount CHECK (amount > 0)
+);
+
+CREATE INDEX idx_receipts_issued_at ON receipts (issued_at);
+
+CREATE TABLE commission_rules (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    code VARCHAR(100) NOT NULL,
+    name VARCHAR(200) NOT NULL,
+    transaction_type VARCHAR(30),
+    calculation_type VARCHAR(30) NOT NULL,
+    rate DECIMAL(7, 4),
+    fixed_amount DECIMAL(19, 2),
+    currency VARCHAR(3) NOT NULL DEFAULT 'VND',
+    min_transaction_value DECIMAL(19, 2),
+    max_transaction_value DECIMAL(19, 2),
+    priority INTEGER NOT NULL DEFAULT 0,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    effective_from DATE,
+    effective_to DATE,
+    description VARCHAR(1000),
+    created_by BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_commission_rules PRIMARY KEY (id),
+    CONSTRAINT uk_commission_rules_code UNIQUE (code),
+    CONSTRAINT fk_commission_rules_created_by
+        FOREIGN KEY (created_by) REFERENCES users (id),
+    CONSTRAINT ck_commission_rules_transaction_type CHECK (
+        transaction_type IS NULL OR transaction_type IN ('SALE', 'LEASE')
+    ),
+    CONSTRAINT ck_commission_rules_calculation_type CHECK (
+        calculation_type IN ('PERCENTAGE', 'FIXED')
+    ),
+    CONSTRAINT ck_commission_rules_value CHECK (
+        (calculation_type = 'PERCENTAGE'
+            AND rate IS NOT NULL
+            AND rate > 0
+            AND rate <= 100
+            AND fixed_amount IS NULL)
+        OR (calculation_type = 'FIXED'
+            AND fixed_amount IS NOT NULL
+            AND fixed_amount > 0
+            AND rate IS NULL)
+    ),
+    CONSTRAINT ck_commission_rules_range CHECK (
+        (min_transaction_value IS NULL OR min_transaction_value >= 0)
+        AND (max_transaction_value IS NULL OR max_transaction_value >= 0)
+        AND (min_transaction_value IS NULL
+            OR max_transaction_value IS NULL
+            OR max_transaction_value >= min_transaction_value)
+    ),
+    CONSTRAINT ck_commission_rules_priority CHECK (priority >= 0),
+    CONSTRAINT ck_commission_rules_dates CHECK (
+        effective_to IS NULL
+        OR effective_from IS NULL
+        OR effective_to >= effective_from
+    )
+);
+
+CREATE INDEX idx_commission_rules_matching
+    ON commission_rules (active, transaction_type, priority);
+CREATE INDEX idx_commission_rules_effective
+    ON commission_rules (effective_from, effective_to);
+
+CREATE TABLE commissions (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    transaction_id BIGINT NOT NULL,
+    commission_rule_id BIGINT,
+    beneficiary_user_id BIGINT NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+    base_amount DECIMAL(19, 2) NOT NULL,
+    rate DECIMAL(7, 4),
+    amount DECIMAL(19, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'VND',
+    approved_by BIGINT,
+    paid_by BIGINT,
+    approved_at TIMESTAMP NULL,
+    paid_at TIMESTAMP NULL,
+    cancelled_at TIMESTAMP NULL,
+    payment_reference VARCHAR(100),
+    notes VARCHAR(1000),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_commissions PRIMARY KEY (id),
+    CONSTRAINT uk_commissions_transaction_beneficiary
+        UNIQUE (transaction_id, beneficiary_user_id),
+    CONSTRAINT fk_commissions_transaction
+        FOREIGN KEY (transaction_id) REFERENCES transactions (id)
+            ON DELETE CASCADE,
+    CONSTRAINT fk_commissions_rule
+        FOREIGN KEY (commission_rule_id) REFERENCES commission_rules (id)
+            ON DELETE SET NULL,
+    CONSTRAINT fk_commissions_beneficiary
+        FOREIGN KEY (beneficiary_user_id) REFERENCES users (id),
+    CONSTRAINT fk_commissions_approved_by
+        FOREIGN KEY (approved_by) REFERENCES users (id) ON DELETE SET NULL,
+    CONSTRAINT fk_commissions_paid_by
+        FOREIGN KEY (paid_by) REFERENCES users (id) ON DELETE SET NULL,
+    CONSTRAINT ck_commissions_status CHECK (
+        status IN ('PENDING', 'APPROVED', 'PAID', 'CANCELLED')
+    ),
+    CONSTRAINT ck_commissions_amount CHECK (
+        base_amount >= 0
+        AND amount >= 0
+        AND (rate IS NULL OR (rate > 0 AND rate <= 100))
+    ),
+    CONSTRAINT ck_commissions_approved CHECK (
+        (status IN ('APPROVED', 'PAID')
+            AND approved_by IS NOT NULL
+            AND approved_at IS NOT NULL)
+        OR status NOT IN ('APPROVED', 'PAID')
+    ),
+    CONSTRAINT ck_commissions_paid CHECK (
+        (status = 'PAID' AND paid_by IS NOT NULL AND paid_at IS NOT NULL)
+        OR status <> 'PAID'
+    ),
+    CONSTRAINT ck_commissions_cancelled CHECK (
+        (status = 'CANCELLED' AND cancelled_at IS NOT NULL)
+        OR status <> 'CANCELLED'
+    )
+);
+
+CREATE INDEX idx_commissions_beneficiary_status
+    ON commissions (beneficiary_user_id, status);
+CREATE INDEX idx_commissions_transaction_status
+    ON commissions (transaction_id, status);

@@ -1,5 +1,7 @@
 package com.javaweb.auth.service;
 
+import com.javaweb.audit.AuditActions;
+import com.javaweb.audit.service.AuditLogService;
 import com.javaweb.auth.dto.AssignUserRolesRequest;
 import com.javaweb.auth.dto.UpdateUserStatusRequest;
 import com.javaweb.auth.dto.UserManagementResponse;
@@ -33,13 +35,16 @@ public class UserManagementService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final AuditLogService auditLogService;
 
     public UserManagementService(
             UserRepository userRepository,
-            RoleRepository roleRepository
+            RoleRepository roleRepository,
+            AuditLogService auditLogService
     ) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional(readOnly = true)
@@ -86,10 +91,22 @@ public class UserManagementService {
     ) {
         User user = requireUser(userId);
         requireManagerCanModify(user, actor);
+        UserStatus previousStatus = user.getStatus();
+        if (previousStatus == request.status()) {
+            return UserManagementResponse.from(user);
+        }
         user.setStatus(request.status());
         if (request.status() != UserStatus.LOCKED) {
             user.setLockedUntil(null);
         }
+        auditLogService.record(
+                actor,
+                AuditActions.USER_STATUS_CHANGED,
+                AuditActions.USER,
+                user.getId(),
+                Map.of("status", previousStatus.name()),
+                Map.of("status", request.status().name())
+        );
         return UserManagementResponse.from(user);
     }
 
@@ -101,6 +118,14 @@ public class UserManagementService {
     ) {
         User user = requireUser(userId);
         requireManagerCanModify(user, actor);
+        List<String> previousRoles = roleNames(user);
+        List<String> requestedRoles = request.roles().stream()
+                .map(Enum::name)
+                .sorted()
+                .toList();
+        if (previousRoles.equals(requestedRoles)) {
+            return UserManagementResponse.from(user);
+        }
         if (!isAdmin(actor) && request.roles().contains(RoleCode.ADMIN)) {
             throw new BusinessException("Managers cannot assign the ADMIN role");
         }
@@ -117,7 +142,23 @@ public class UserManagementService {
                 .map(rolesByCode::get)
                 .collect(Collectors.toSet());
         user.replaceRoles(roles);
+        auditLogService.record(
+                actor,
+                AuditActions.USER_ROLES_CHANGED,
+                AuditActions.USER,
+                user.getId(),
+                Map.of("roles", previousRoles),
+                Map.of("roles", roleNames(user))
+        );
         return UserManagementResponse.from(user);
+    }
+
+    private List<String> roleNames(User user) {
+        return user.getRoles().stream()
+                .map(Role::getCode)
+                .map(Enum::name)
+                .sorted()
+                .toList();
     }
 
     private User requireUser(Long userId) {

@@ -1,0 +1,200 @@
+CREATE TABLE lead_sources (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    code VARCHAR(50) NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    description VARCHAR(1000),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_lead_sources PRIMARY KEY (id),
+    CONSTRAINT uk_lead_sources_code UNIQUE (code)
+);
+
+INSERT INTO lead_sources (code, name, description)
+VALUES ('MANUAL', 'Manual', 'Lead entered manually'),
+       ('WEBSITE', 'Website', 'Lead submitted from the public website'),
+       ('LISTING_INQUIRY', 'Listing inquiry', 'Lead created from a listing inquiry'),
+       ('REFERRAL', 'Referral', 'Lead referred by an existing contact'),
+       ('IMPORT', 'Import', 'Lead imported from an external source'),
+       ('CHATBOT', 'Chatbot', 'Lead captured by the website chatbot'),
+       ('OTHER', 'Other', 'Lead from another source');
+
+CREATE TABLE leads (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    code VARCHAR(50) NOT NULL,
+    customer_id BIGINT,
+    source_id BIGINT NOT NULL,
+    listing_id BIGINT,
+    current_assignee_id BIGINT,
+    created_by BIGINT,
+    full_name VARCHAR(150) NOT NULL,
+    email VARCHAR(255),
+    phone VARCHAR(30),
+    status VARCHAR(30) NOT NULL DEFAULT 'NEW',
+    priority VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
+    score INTEGER,
+    message VARCHAR(4000),
+    lost_reason VARCHAR(1000),
+    last_contacted_at TIMESTAMP NULL,
+    converted_at TIMESTAMP NULL,
+    closed_at TIMESTAMP NULL,
+    deleted_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_leads PRIMARY KEY (id),
+    CONSTRAINT uk_leads_code UNIQUE (code),
+    CONSTRAINT fk_leads_customer
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE SET NULL,
+    CONSTRAINT fk_leads_source
+        FOREIGN KEY (source_id) REFERENCES lead_sources (id),
+    CONSTRAINT fk_leads_listing
+        FOREIGN KEY (listing_id) REFERENCES listings (id) ON DELETE SET NULL,
+    CONSTRAINT fk_leads_current_assignee
+        FOREIGN KEY (current_assignee_id) REFERENCES users (id) ON DELETE SET NULL,
+    CONSTRAINT fk_leads_created_by
+        FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL,
+    CONSTRAINT ck_leads_status CHECK (
+        status IN (
+            'NEW',
+            'ASSIGNED',
+            'CONTACTED',
+            'INTERESTED',
+            'VIEWING_SCHEDULED',
+            'NEGOTIATING',
+            'CLOSED_WON',
+            'CLOSED_LOST',
+            'INVALID'
+        )
+    ),
+    CONSTRAINT ck_leads_priority CHECK (
+        priority IN ('LOW', 'MEDIUM', 'HIGH')
+    ),
+    CONSTRAINT ck_leads_score CHECK (
+        score IS NULL OR (score >= 0 AND score <= 100)
+    ),
+    CONSTRAINT ck_leads_contact CHECK (
+        email IS NOT NULL OR phone IS NOT NULL OR customer_id IS NOT NULL
+    )
+);
+
+CREATE INDEX idx_leads_status_assignee
+    ON leads (status, current_assignee_id);
+CREATE INDEX idx_leads_source_created
+    ON leads (source_id, created_at);
+CREATE INDEX idx_leads_listing ON leads (listing_id);
+CREATE INDEX idx_leads_customer ON leads (customer_id);
+CREATE INDEX idx_leads_email ON leads (email);
+CREATE INDEX idx_leads_phone ON leads (phone);
+
+CREATE TABLE lead_assignments (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    lead_id BIGINT NOT NULL,
+    assigned_to BIGINT NOT NULL,
+    assigned_by BIGINT,
+    assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    unassigned_at TIMESTAMP NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    notes VARCHAR(1000),
+    CONSTRAINT pk_lead_assignments PRIMARY KEY (id),
+    CONSTRAINT fk_lead_assignments_lead
+        FOREIGN KEY (lead_id) REFERENCES leads (id) ON DELETE CASCADE,
+    CONSTRAINT fk_lead_assignments_assigned_to
+        FOREIGN KEY (assigned_to) REFERENCES users (id),
+    CONSTRAINT fk_lead_assignments_assigned_by
+        FOREIGN KEY (assigned_by) REFERENCES users (id) ON DELETE SET NULL,
+    CONSTRAINT ck_lead_assignments_time CHECK (
+        unassigned_at IS NULL OR unassigned_at >= assigned_at
+    )
+);
+
+CREATE INDEX idx_lead_assignments_lead_active
+    ON lead_assignments (lead_id, active);
+CREATE INDEX idx_lead_assignments_assignee_active
+    ON lead_assignments (assigned_to, active);
+
+CREATE TABLE lead_notes (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    lead_id BIGINT NOT NULL,
+    author_id BIGINT NOT NULL,
+    content VARCHAR(4000) NOT NULL,
+    pinned BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_lead_notes PRIMARY KEY (id),
+    CONSTRAINT fk_lead_notes_lead
+        FOREIGN KEY (lead_id) REFERENCES leads (id) ON DELETE CASCADE,
+    CONSTRAINT fk_lead_notes_author
+        FOREIGN KEY (author_id) REFERENCES users (id)
+);
+
+CREATE INDEX idx_lead_notes_lead_created
+    ON lead_notes (lead_id, created_at);
+
+CREATE TABLE lead_activities (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    lead_id BIGINT NOT NULL,
+    actor_id BIGINT,
+    activity_type VARCHAR(30) NOT NULL,
+    subject VARCHAR(250),
+    details VARCHAR(4000),
+    occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_lead_activities PRIMARY KEY (id),
+    CONSTRAINT fk_lead_activities_lead
+        FOREIGN KEY (lead_id) REFERENCES leads (id) ON DELETE CASCADE,
+    CONSTRAINT fk_lead_activities_actor
+        FOREIGN KEY (actor_id) REFERENCES users (id) ON DELETE SET NULL,
+    CONSTRAINT ck_lead_activities_type CHECK (
+        activity_type IN (
+            'CALL',
+            'EMAIL',
+            'CHAT',
+            'MEETING',
+            'STATUS_CHANGE',
+            'ASSIGNMENT',
+            'OTHER'
+        )
+    )
+);
+
+CREATE INDEX idx_lead_activities_lead_occurred
+    ON lead_activities (lead_id, occurred_at);
+CREATE INDEX idx_lead_activities_type
+    ON lead_activities (activity_type);
+
+CREATE TABLE follow_up_tasks (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    lead_id BIGINT NOT NULL,
+    assigned_to BIGINT NOT NULL,
+    created_by BIGINT NOT NULL,
+    title VARCHAR(250) NOT NULL,
+    description VARCHAR(2000),
+    status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+    priority VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
+    due_at TIMESTAMP NOT NULL,
+    completed_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_follow_up_tasks PRIMARY KEY (id),
+    CONSTRAINT fk_follow_up_tasks_lead
+        FOREIGN KEY (lead_id) REFERENCES leads (id) ON DELETE CASCADE,
+    CONSTRAINT fk_follow_up_tasks_assigned_to
+        FOREIGN KEY (assigned_to) REFERENCES users (id),
+    CONSTRAINT fk_follow_up_tasks_created_by
+        FOREIGN KEY (created_by) REFERENCES users (id),
+    CONSTRAINT ck_follow_up_tasks_status CHECK (
+        status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')
+    ),
+    CONSTRAINT ck_follow_up_tasks_priority CHECK (
+        priority IN ('LOW', 'MEDIUM', 'HIGH')
+    ),
+    CONSTRAINT ck_follow_up_tasks_completion CHECK (
+        (status = 'COMPLETED' AND completed_at IS NOT NULL)
+        OR (status <> 'COMPLETED' AND completed_at IS NULL)
+    )
+);
+
+CREATE INDEX idx_follow_up_tasks_assignee_status_due
+    ON follow_up_tasks (assigned_to, status, due_at);
+CREATE INDEX idx_follow_up_tasks_lead_due
+    ON follow_up_tasks (lead_id, due_at);

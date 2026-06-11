@@ -67,6 +67,16 @@ class OpenApiIntegrationTest {
                 .andExpect(jsonPath(
                         "$.paths['/api/v1/files/upload'].post.requestBody.content['multipart/form-data']"
                 ).exists())
+                .andExpect(jsonPath("$.paths['/api/v1/notifications'].get").exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/notifications/unread-count'].get"
+                ).exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/notifications/{notificationId}/read'].patch"
+                ).exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/notifications/read-all'].patch"
+                ).exists())
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"));
     }

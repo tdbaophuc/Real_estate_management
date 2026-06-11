@@ -11,3 +11,7 @@ spring:
 springdoc:
   swagger-ui:
     enabled: ${SWAGGER_UI_ENABLED:true}
+
+app:
+  reminders:
+    enabled: ${REMINDERS_ENABLED:false}

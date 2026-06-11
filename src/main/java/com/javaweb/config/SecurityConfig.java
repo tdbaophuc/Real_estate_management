@@ -80,6 +80,11 @@ public class SecurityConfig {
                                 "/uploads/**",
                                 "/error"
                         ).permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/search/listings",
+                                "/api/v1/search/listings/**"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider)

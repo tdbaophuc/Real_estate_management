@@ -1,0 +1,20 @@
+CREATE TABLE audit_logs (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    actor_id BIGINT,
+    action VARCHAR(100) NOT NULL,
+    resource_type VARCHAR(100) NOT NULL,
+    resource_id BIGINT NOT NULL,
+    old_value_json VARCHAR(8000),
+    new_value_json VARCHAR(8000),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_audit_logs PRIMARY KEY (id),
+    CONSTRAINT fk_audit_logs_actor
+        FOREIGN KEY (actor_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_audit_logs_actor_created
+    ON audit_logs (actor_id, created_at);
+CREATE INDEX idx_audit_logs_action_created
+    ON audit_logs (action, created_at);
+CREATE INDEX idx_audit_logs_resource_created
+    ON audit_logs (resource_type, resource_id, created_at);

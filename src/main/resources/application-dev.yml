@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3306/estate-base-test}
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/real_estate?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${DB_USERNAME:real_estate}
+    password: ${DB_PASSWORD}
   flyway:
     baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:true}
   jpa:
@@ -18,3 +18,5 @@ app:
       email: ${DEV_ADMIN_EMAIL:admin@realestate.local}
       password: ${DEV_ADMIN_PASSWORD:}
       full-name: ${DEV_ADMIN_FULL_NAME:Development Administrator}
+  reminders:
+    enabled: ${REMINDERS_ENABLED:true}

@@ -70,6 +70,10 @@ public class ListingView {
         return sessionId;
     }
 
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
+    }
+
     public String getIpHash() {
         return ipHash;
     }

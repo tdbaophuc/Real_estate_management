@@ -59,6 +59,21 @@ public interface ListingRepository
     })
     Optional<Listing> findWithUpdateDetailsById(Long id);
 
+    @EntityGraph(attributePaths = {
+            "property",
+            "property.propertyType",
+            "property.address",
+            "property.address.province",
+            "property.address.district",
+            "property.address.ward",
+            "property.createdBy",
+            "property.assignedAgent",
+            "property.amenities",
+            "property.amenities.amenity",
+            "createdBy"
+    })
+    Optional<Listing> findWithAiDescriptionDetailsById(Long id);
+
     List<Listing> findAllByPropertyIdAndDeletedAtIsNullOrderByCreatedAtDesc(Long propertyId);
 
     Page<Listing> findAllByCreatedByIdAndDeletedAtIsNull(Long createdById, Pageable pageable);

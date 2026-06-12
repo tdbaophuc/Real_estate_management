@@ -19,4 +19,13 @@ public interface PropertyImageRepository extends JpaRepository<PropertyImage, Lo
 
     @EntityGraph(attributePaths = {"uploadedBy", "fileResource"})
     Optional<PropertyImage> findByIdAndPropertyId(Long id, Long propertyId);
+
+    @EntityGraph(attributePaths = {
+            "uploadedBy",
+            "fileResource",
+            "property",
+            "property.createdBy",
+            "property.assignedAgent"
+    })
+    Optional<PropertyImage> findWithAnalysisDetailsById(Long id);
 }

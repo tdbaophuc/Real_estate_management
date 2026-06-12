@@ -175,7 +175,7 @@ class FlywayMigrationIntegrationTest {
     void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("create ai lead score schema");
+                .isEqualTo("create ai chat schema");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -244,6 +244,8 @@ class FlywayMigrationIntegrationTest {
                 "ai_request_logs",
                 "ai_recommendations",
                 "ai_lead_scores",
+                "ai_conversations",
+                "ai_messages",
                 "flyway_schema_history"
         );
         assertThat(jdbcTemplate.queryForList(

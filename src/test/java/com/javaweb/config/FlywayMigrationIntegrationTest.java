@@ -175,7 +175,7 @@ class FlywayMigrationIntegrationTest {
     void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("create ai image analysis schema");
+                .isEqualTo("add performance indexes");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -534,6 +534,7 @@ class FlywayMigrationIntegrationTest {
                 """,
                 Integer.class
         )).isEqualTo(3);
+        assertPerformanceIndexesExist();
 
         assertThatThrownBy(() -> jdbcTemplate.update(
                 """
@@ -559,6 +560,36 @@ class FlywayMigrationIntegrationTest {
                 WHERE recipient_email = 'notification-migration@example.com'
                 """
         )).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private void assertPerformanceIndexesExist() {
+        assertThat(jdbcTemplate.queryForList(
+                """
+                SELECT LOWER(index_name)
+                FROM information_schema.indexes
+                WHERE LOWER(table_schema) = 'public'
+                  AND LOWER(index_name) IN (
+                      'idx_properties_deleted_status_created',
+                      'idx_listings_public_published',
+                      'idx_customers_agent_deleted_status_created',
+                      'idx_leads_assignee_deleted_status_created',
+                      'idx_transactions_completed_report',
+                      'idx_payments_status_paid_report',
+                      'idx_deposits_status_verified_report',
+                      'idx_commissions_status_paid_report'
+                  )
+                """,
+                String.class
+        )).containsExactlyInAnyOrder(
+                "idx_properties_deleted_status_created",
+                "idx_listings_public_published",
+                "idx_customers_agent_deleted_status_created",
+                "idx_leads_assignee_deleted_status_created",
+                "idx_transactions_completed_report",
+                "idx_payments_status_paid_report",
+                "idx_deposits_status_verified_report",
+                "idx_commissions_status_paid_report"
+        );
     }
 
     @Test

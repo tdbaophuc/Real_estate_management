@@ -78,7 +78,27 @@ class OpenApiIntegrationTest {
                         "$.paths['/api/v1/notifications/read-all'].patch"
                 ).exists())
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
-                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"));
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"))
+                .andExpect(jsonPath("$.components.schemas.ApiResponse").exists())
+                .andExpect(jsonPath("$.components.schemas.ApiErrorResponse").exists())
+                .andExpect(jsonPath("$.components.schemas.ValidationError").exists())
+                .andExpect(jsonPath("$.components.schemas.PageResponse").exists())
+                .andExpect(jsonPath("$.components.responses.ValidationError.content['application/json'].example.code")
+                        .value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.components.responses.Unauthorized.content['application/json'].example.code")
+                        .value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.paths['/api/v1/auth/login'].post.tags[0]").value("Authentication"))
+                .andExpect(jsonPath("$.paths['/api/v1/properties'].get.tags[0]").value("Properties"))
+                .andExpect(jsonPath("$.paths['/api/v1/properties'].get.responses.400['$ref']")
+                        .value("#/components/responses/BadRequest"))
+                .andExpect(jsonPath("$.paths['/api/v1/properties'].get.responses.401['$ref']")
+                        .value("#/components/responses/Unauthorized"))
+                .andExpect(jsonPath("$.paths['/api/v1/properties'].get.responses.403['$ref']")
+                        .value("#/components/responses/Forbidden"))
+                .andExpect(jsonPath("$.paths['/api/v1/properties'].get.responses.404['$ref']")
+                        .value("#/components/responses/NotFound"))
+                .andExpect(jsonPath("$.paths['/api/v1/properties'].get.responses.500['$ref']")
+                        .value("#/components/responses/InternalServerError"));
     }
 
     @Test

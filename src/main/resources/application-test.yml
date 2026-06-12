@@ -16,10 +16,15 @@ spring:
 
 app:
   security:
+    cors:
+      allowed-origins:
+        - http://localhost:3000
     jwt:
       secret: dGVzdC1vbmx5LWp3dC1zZWNyZXQtbXVzdC1iZS1hdC1sZWFzdC0zMi1ieXRlcw==
       access-token-expiration: PT30M
       refresh-token-expiration: P30D
+    rate-limit:
+      enabled: false
   storage:
     local-root: target/test-storage
   reminders:

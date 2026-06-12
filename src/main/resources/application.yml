@@ -27,10 +27,29 @@ server:
 
 app:
   security:
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+      allowed-methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      allowed-headers:
+        - Authorization
+        - Content-Type
+      allow-credentials: ${CORS_ALLOW_CREDENTIALS:false}
+      max-age-seconds: ${CORS_MAX_AGE_SECONDS:3600}
     jwt:
       secret: ${JWT_SECRET}
       access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:PT30M}
       refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:P30D}
+    rate-limit:
+      enabled: ${RATE_LIMIT_ENABLED:true}
+      window: ${RATE_LIMIT_WINDOW:PT1M}
+      auth-requests: ${AUTH_RATE_LIMIT_REQUESTS:20}
+      ai-requests: ${AI_RATE_LIMIT_REQUESTS:60}
   storage:
     local-root: ${LOCAL_STORAGE_ROOT:./var/storage}
     max-file-size: ${MAX_UPLOAD_SIZE:10MB}

@@ -35,6 +35,8 @@ public interface AppointmentRepository
             Pageable pageable
     );
 
+    List<Appointment> findAllByLeadIdOrderByStartAtDesc(Long leadId);
+
     List<Appointment> findAllByReminderSentAtIsNullAndStatusInAndStartAtBetweenOrderByStartAtAsc(
             Collection<AppointmentStatus> statuses,
             Instant startAt,

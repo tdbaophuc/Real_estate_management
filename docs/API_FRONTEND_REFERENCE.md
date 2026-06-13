@@ -32,10 +32,10 @@ Get-Content .env |
 mvn spring-boot:run
 ```
 
-Docker Compose cung cấp MySQL (`3306`), Redis (`6379`), MinIO
-(`9000`/`9001`) và MailHog (`1025`/`8025`). Ở Day 43 backend đang dùng trực
-tiếp MySQL; upload vẫn lưu local và email dev vẫn ghi log. Nếu đổi `DB_NAME`
-hoặc `DB_PORT` trong `.env`, cần cập nhật `DB_URL` tương ứng.
+Docker Compose cung cấp PostgreSQL (`5432`), Redis (`6379`), MinIO
+(`9000`/`9001`) và MailHog (`1025`/`8025`). Backend đang dùng trực
+tiếp PostgreSQL; upload vẫn lưu local và email dev vẫn ghi log. Nếu đổi
+`DB_NAME` hoặc `DB_PORT` trong `.env`, cần cập nhật `DB_URL` tương ứng.
 
 Các API cần đăng nhập phải gửi:
 

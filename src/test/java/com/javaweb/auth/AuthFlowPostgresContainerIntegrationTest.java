@@ -9,7 +9,7 @@ import com.javaweb.auth.enums.UserStatus;
 import com.javaweb.auth.repository.RefreshTokenRepository;
 import com.javaweb.auth.repository.RoleRepository;
 import com.javaweb.auth.repository.UserRepository;
-import com.javaweb.support.AbstractMySqlContainerIntegrationTest;
+import com.javaweb.support.AbstractPostgresContainerIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-class AuthFlowMySqlContainerIntegrationTest extends AbstractMySqlContainerIntegrationTest {
+class AuthFlowPostgresContainerIntegrationTest extends AbstractPostgresContainerIntegrationTest {
     private static final String EMAIL = "day44-auth@example.test";
     private static final String PASSWORD = "StrongPassword123!";
 
@@ -69,7 +69,7 @@ class AuthFlowMySqlContainerIntegrationTest extends AbstractMySqlContainerIntegr
     }
 
     @Test
-    void shouldLoginReadCurrentUserRotateRefreshTokenAndLogoutOnMySql() throws Exception {
+    void shouldLoginReadCurrentUserRotateRefreshTokenAndLogoutOnPostgres() throws Exception {
         String loginResponse = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(

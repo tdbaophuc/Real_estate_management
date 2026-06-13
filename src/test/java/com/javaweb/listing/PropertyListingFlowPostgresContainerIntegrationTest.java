@@ -18,7 +18,7 @@ import com.javaweb.property.repository.DistrictRepository;
 import com.javaweb.property.repository.PropertyTypeRepository;
 import com.javaweb.property.repository.ProvinceRepository;
 import com.javaweb.property.repository.WardRepository;
-import com.javaweb.support.AbstractMySqlContainerIntegrationTest;
+import com.javaweb.support.AbstractPostgresContainerIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-class PropertyListingFlowMySqlContainerIntegrationTest extends AbstractMySqlContainerIntegrationTest {
+class PropertyListingFlowPostgresContainerIntegrationTest extends AbstractPostgresContainerIntegrationTest {
     private static final String PASSWORD = "StrongPassword123!";
 
     @Autowired
@@ -108,7 +108,7 @@ class PropertyListingFlowMySqlContainerIntegrationTest extends AbstractMySqlCont
     }
 
     @Test
-    void shouldCreatePropertyCreateListingAndPublishPublicSearchResultOnMySql() throws Exception {
+    void shouldCreatePropertyCreateListingAndPublishPublicSearchResultOnPostgres() throws Exception {
         Long propertyId = createProperty();
 
         MvcResult listingResult = mockMvc.perform(post("/api/v1/listings")
@@ -186,6 +186,7 @@ class PropertyListingFlowMySqlContainerIntegrationTest extends AbstractMySqlCont
         request.put("floors", 1);
         request.put("legalStatus", "PINK_BOOK");
         request.put("ownerId", owner.getId());
+        request.put("assignedAgentId", agent.getId());
         request.put("address", address);
         request.put("amenities", List.of(Map.of(
                 "amenityId",
@@ -202,7 +203,7 @@ class PropertyListingFlowMySqlContainerIntegrationTest extends AbstractMySqlCont
         request.put("code", "LISTING-D44-001");
         request.put("title", "Day 44 Container Listing");
         request.put("slug", "day44-container-listing");
-        request.put("description", "Published listing created from a property in the MySQL container flow");
+        request.put("description", "Published listing created from a property in the Postgres container flow");
         request.put("purpose", "SALE");
         request.put("visibility", "PUBLIC");
         request.put("askingPrice", "7300000000.00");
@@ -246,21 +247,25 @@ class PropertyListingFlowMySqlContainerIntegrationTest extends AbstractMySqlCont
     }
 
     private void truncateMutableTables() {
-        jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 0");
-        jdbcTemplate.execute("TRUNCATE TABLE listing_favorites");
-        jdbcTemplate.execute("TRUNCATE TABLE listing_views");
-        jdbcTemplate.execute("TRUNCATE TABLE listing_status_histories");
-        jdbcTemplate.execute("TRUNCATE TABLE listings");
-        jdbcTemplate.execute("TRUNCATE TABLE property_amenities");
-        jdbcTemplate.execute("TRUNCATE TABLE property_images");
-        jdbcTemplate.execute("TRUNCATE TABLE property_legal_documents");
-        jdbcTemplate.execute("TRUNCATE TABLE properties");
-        jdbcTemplate.execute("TRUNCATE TABLE addresses");
-        jdbcTemplate.execute("TRUNCATE TABLE wards");
-        jdbcTemplate.execute("TRUNCATE TABLE districts");
-        jdbcTemplate.execute("TRUNCATE TABLE provinces");
-        jdbcTemplate.execute("TRUNCATE TABLE refresh_tokens");
-        jdbcTemplate.execute("TRUNCATE TABLE users");
-        jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 1");
+        jdbcTemplate.execute(
+                """
+                TRUNCATE TABLE
+                    listing_favorites,
+                    listing_views,
+                    listing_status_histories,
+                    listings,
+                    property_amenities,
+                    property_images,
+                    property_legal_documents,
+                    properties,
+                    addresses,
+                    wards,
+                    districts,
+                    provinces,
+                    refresh_tokens,
+                    users
+                RESTART IDENTITY CASCADE
+                """
+        );
     }
 }

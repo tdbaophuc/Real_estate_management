@@ -175,13 +175,13 @@ class FlywayMigrationIntegrationTest {
     void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("create audit log schema");
+                .isEqualTo("add performance indexes");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """
                 SELECT LOWER(table_name)
                 FROM information_schema.tables
-                WHERE table_schema = 'PUBLIC'
+                WHERE LOWER(table_schema) = 'public'
                 """,
                 String.class
         );
@@ -241,6 +241,12 @@ class FlywayMigrationIntegrationTest {
                 "commissions",
                 "commission_rules",
                 "audit_logs",
+                "ai_request_logs",
+                "ai_recommendations",
+                "ai_lead_scores",
+                "ai_conversations",
+                "ai_messages",
+                "ai_image_analyses",
                 "flyway_schema_history"
         );
         assertThat(jdbcTemplate.queryForList(
@@ -325,8 +331,8 @@ class FlywayMigrationIntegrationTest {
                 """
                 SELECT COUNT(*)
                 FROM information_schema.table_constraints
-                WHERE table_schema = 'PUBLIC'
-                  AND table_name = 'PROPERTIES'
+                WHERE LOWER(table_schema) = 'public'
+                  AND LOWER(table_name) = 'properties'
                   AND constraint_type = 'FOREIGN KEY'
                 """,
                 Integer.class
@@ -335,9 +341,9 @@ class FlywayMigrationIntegrationTest {
                 """
                 SELECT COUNT(*)
                 FROM information_schema.columns
-                WHERE table_schema = 'PUBLIC'
-                  AND table_name = 'PROPERTY_IMAGES'
-                  AND column_name = 'FILE_RESOURCE_ID'
+                WHERE LOWER(table_schema) = 'public'
+                  AND LOWER(table_name) = 'property_images'
+                  AND LOWER(column_name) = 'file_resource_id'
                 """,
                 Integer.class
         )).isEqualTo(1);
@@ -345,8 +351,8 @@ class FlywayMigrationIntegrationTest {
                 """
                 SELECT COUNT(*)
                 FROM information_schema.table_constraints
-                WHERE table_schema = 'PUBLIC'
-                  AND table_name = 'LISTINGS'
+                WHERE LOWER(table_schema) = 'public'
+                  AND LOWER(table_name) = 'listings'
                   AND constraint_type = 'FOREIGN KEY'
                 """,
                 Integer.class
@@ -355,8 +361,8 @@ class FlywayMigrationIntegrationTest {
                 """
                 SELECT COUNT(*)
                 FROM information_schema.table_constraints
-                WHERE table_schema = 'PUBLIC'
-                  AND table_name = 'LISTINGS'
+                WHERE LOWER(table_schema) = 'public'
+                  AND LOWER(table_name) = 'listings'
                   AND constraint_type = 'CHECK'
                 """,
                 Integer.class
@@ -365,8 +371,8 @@ class FlywayMigrationIntegrationTest {
                 """
                 SELECT COUNT(*)
                 FROM information_schema.table_constraints
-                WHERE table_schema = 'PUBLIC'
-                  AND table_name = 'LISTING_FAVORITES'
+                WHERE LOWER(table_schema) = 'public'
+                  AND LOWER(table_name) = 'listing_favorites'
                   AND constraint_type = 'UNIQUE'
                 """,
                 Integer.class
@@ -375,15 +381,15 @@ class FlywayMigrationIntegrationTest {
                 """
                 SELECT COUNT(*)
                 FROM information_schema.columns
-                WHERE table_schema = 'PUBLIC'
-                  AND table_name = 'LISTINGS'
-                  AND column_name IN (
-                      'PROPERTY_ID',
-                      'STATUS',
-                      'SUBMITTED_AT',
-                      'REVIEWED_AT',
-                      'PUBLISHED_AT',
-                      'EXPIRES_AT'
+                WHERE LOWER(table_schema) = 'public'
+                  AND LOWER(table_name) = 'listings'
+                  AND LOWER(column_name) IN (
+                      'property_id',
+                      'status',
+                      'submitted_at',
+                      'reviewed_at',
+                      'published_at',
+                      'expires_at'
                   )
                 """,
                 Integer.class
@@ -392,8 +398,8 @@ class FlywayMigrationIntegrationTest {
                 """
                 SELECT COUNT(*)
                 FROM information_schema.table_constraints
-                WHERE table_schema = 'PUBLIC'
-                  AND table_name = 'CUSTOMERS'
+                WHERE LOWER(table_schema) = 'public'
+                  AND LOWER(table_name) = 'customers'
                   AND constraint_type = 'FOREIGN KEY'
                 """,
                 Integer.class
@@ -402,8 +408,8 @@ class FlywayMigrationIntegrationTest {
                 """
                 SELECT COUNT(*)
                 FROM information_schema.table_constraints
-                WHERE table_schema = 'PUBLIC'
-                  AND table_name = 'CUSTOMER_FAVORITE_LISTINGS'
+                WHERE LOWER(table_schema) = 'public'
+                  AND LOWER(table_name) = 'customer_favorite_listings'
                   AND constraint_type = 'UNIQUE'
                 """,
                 Integer.class
@@ -518,16 +524,17 @@ class FlywayMigrationIntegrationTest {
                 """
                 SELECT COUNT(*)
                 FROM information_schema.columns
-                WHERE table_schema = 'PUBLIC'
+                WHERE LOWER(table_schema) = 'public'
                   AND (
-                      (table_name = 'FOLLOW_UP_TASKS'
-                          AND column_name = 'REMINDER_SENT_AT')
-                      OR (table_name = 'EMAIL_LOGS'
-                          AND column_name IN ('REFERENCE_TYPE', 'REFERENCE_ID'))
+                      (LOWER(table_name) = 'follow_up_tasks'
+                          AND LOWER(column_name) = 'reminder_sent_at')
+                      OR (LOWER(table_name) = 'email_logs'
+                          AND LOWER(column_name) IN ('reference_type', 'reference_id'))
                   )
                 """,
                 Integer.class
         )).isEqualTo(3);
+        assertPerformanceIndexesExist();
 
         assertThatThrownBy(() -> jdbcTemplate.update(
                 """
@@ -553,6 +560,36 @@ class FlywayMigrationIntegrationTest {
                 WHERE recipient_email = 'notification-migration@example.com'
                 """
         )).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private void assertPerformanceIndexesExist() {
+        assertThat(jdbcTemplate.queryForList(
+                """
+                SELECT LOWER(index_name)
+                FROM information_schema.indexes
+                WHERE LOWER(table_schema) = 'public'
+                  AND LOWER(index_name) IN (
+                      'idx_properties_deleted_status_created',
+                      'idx_listings_public_published',
+                      'idx_customers_agent_deleted_status_created',
+                      'idx_leads_assignee_deleted_status_created',
+                      'idx_transactions_completed_report',
+                      'idx_payments_status_paid_report',
+                      'idx_deposits_status_verified_report',
+                      'idx_commissions_status_paid_report'
+                  )
+                """,
+                String.class
+        )).containsExactlyInAnyOrder(
+                "idx_properties_deleted_status_created",
+                "idx_listings_public_published",
+                "idx_customers_agent_deleted_status_created",
+                "idx_leads_assignee_deleted_status_created",
+                "idx_transactions_completed_report",
+                "idx_payments_status_paid_report",
+                "idx_deposits_status_verified_report",
+                "idx_commissions_status_paid_report"
+        );
     }
 
     @Test

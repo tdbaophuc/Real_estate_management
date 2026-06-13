@@ -1,5 +1,6 @@
 package com.javaweb.auth.dto;
 
+import com.javaweb.auth.validation.StrongPassword;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -13,6 +14,7 @@ public record RegisterRequest(
 
         @NotBlank(message = "password is required")
         @Size(min = 12, max = 200, message = "password must contain between 12 and 200 characters")
+        @StrongPassword
         String password,
 
         @NotBlank(message = "fullName is required")

@@ -80,13 +80,34 @@ public class DevAdminSeeder implements ApplicationRunner {
         if (email == null || email.isBlank()) {
             throw new IllegalStateException("DEV_ADMIN_EMAIL must be configured when dev admin seed is enabled");
         }
-        if (password == null || password.length() < MINIMUM_PASSWORD_LENGTH) {
+        if (password == null || password.length() < MINIMUM_PASSWORD_LENGTH || !isStrongPassword(password)) {
             throw new IllegalStateException(
-                    "DEV_ADMIN_PASSWORD must contain at least " + MINIMUM_PASSWORD_LENGTH + " characters"
+                    "DEV_ADMIN_PASSWORD must contain at least " + MINIMUM_PASSWORD_LENGTH
+                            + " characters, uppercase, lowercase, number, and special character"
             );
         }
         if (fullName == null || fullName.isBlank()) {
             throw new IllegalStateException("DEV_ADMIN_FULL_NAME must be configured when dev admin seed is enabled");
         }
+    }
+
+    private boolean isStrongPassword(String value) {
+        boolean hasLowercase = false;
+        boolean hasUppercase = false;
+        boolean hasDigit = false;
+        boolean hasSpecial = false;
+        for (int index = 0; index < value.length(); index++) {
+            char current = value.charAt(index);
+            if (Character.isLowerCase(current)) {
+                hasLowercase = true;
+            } else if (Character.isUpperCase(current)) {
+                hasUppercase = true;
+            } else if (Character.isDigit(current)) {
+                hasDigit = true;
+            } else if (!Character.isWhitespace(current)) {
+                hasSpecial = true;
+            }
+        }
+        return hasLowercase && hasUppercase && hasDigit && hasSpecial;
     }
 }

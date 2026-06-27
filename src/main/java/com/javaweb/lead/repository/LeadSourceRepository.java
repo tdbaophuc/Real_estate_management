@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface LeadSourceRepository extends JpaRepository<LeadSource, Long> {
+    Optional<LeadSource> findByCode(String code);
+
     Optional<LeadSource> findByCodeAndActiveTrue(String code);
 
     List<LeadSource> findAllByActiveTrueOrderByName();

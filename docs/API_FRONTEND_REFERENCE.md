@@ -308,9 +308,47 @@ altText=Mat tien
 displayOrder=0
 ```
 
-## 7. Listing API
+## 7. Master Data API
 
-### 7.1 Internal listing workflow
+Base: `/api/v1/master-data`, public or bearer. Cac endpoint nay read-only va
+chi tra item `active=true`.
+
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| GET | `/provinces` | Tinh/thanh |
+| GET | `/provinces/{provinceId}/districts` | Quan/huyen theo province |
+| GET | `/districts/{districtId}/wards` | Phuong/xa theo district |
+| GET | `/property-types` | Loai bat dong san |
+| GET | `/amenities` | Tien ich, co filter `category` |
+| GET | `/listing-packages` | Goi tin dang active |
+| GET | `/lead-sources` | Nguon lead active |
+
+Location response item:
+
+```json
+{
+  "id": 1,
+  "code": "HCM",
+  "name": "Ho Chi Minh City",
+  "administrativeType": "Municipality",
+  "active": true
+}
+```
+
+Amenity filter:
+
+```http
+GET /api/v1/master-data/amenities?category=LEISURE
+```
+
+`category`: `ACCESS`, `SECURITY`, `LEISURE`, `FEATURE`.
+
+Listing package item includes `price`, `currency`, `durationDays`, `featured`,
+`priorityLevel`. Lead source item includes `code`, `name`, `description`.
+
+## 8. Listing API
+
+### 8.1 Internal listing workflow
 
 Base: `/api/v1/listings`, role `AGENT|MANAGER|ADMIN`.
 
@@ -351,7 +389,7 @@ Luu y backend hien chua co `GET /api/v1/listings` va
 - Luu response create/update trong state de tiep tuc workflow.
 - Neu can man hinh moderation day du cho draft/pending, can bo sung backend API.
 
-### 7.2 Public listing search
+### 8.2 Public listing search
 
 Base: `/api/v1/search/listings`, public.
 
@@ -368,7 +406,7 @@ X-Session-Id: browser-session-id
 
 Dung de ghi view cho khach chua dang nhap.
 
-### 7.3 Favorite
+### 8.3 Favorite
 
 Base: `/api/v1/listings`, role `CUSTOMER|AGENT|MANAGER|ADMIN`.
 
@@ -378,7 +416,7 @@ Base: `/api/v1/listings`, role `CUSTOMER|AGENT|MANAGER|ADMIN`.
 | DELETE | `/{listingId}/favorite` | Bo favorite |
 | GET | `/favorites` | Danh sach favorite cua user |
 
-## 8. Customer CRM API
+## 9. Customer CRM API
 
 Base: `/api/v1/customers`, role `AGENT|MANAGER|ADMIN`.
 
@@ -413,7 +451,7 @@ Base: `/api/v1/customers`, role `AGENT|MANAGER|ADMIN`.
 
 Can co it nhat mot trong `email`, `phone`, `userId`.
 
-## 9. Lead API
+## 10. Lead API
 
 Base: `/api/v1/leads`, role `AGENT|MANAGER|ADMIN`.
 
@@ -447,7 +485,7 @@ Base: `/api/v1/leads`, role `AGENT|MANAGER|ADMIN`.
 
 Can co it nhat mot trong `email`, `phone`, `customerId`.
 
-## 10. Appointment API
+## 11. Appointment API
 
 Base: `/api/v1/appointments`, role `AGENT|MANAGER|ADMIN` cho quan ly.
 
@@ -466,7 +504,7 @@ Base: `/api/v1/appointments`, role `AGENT|MANAGER|ADMIN` cho quan ly.
 Nen xay UI calendar, conflict warning, status badge va form feedback sau khi
 hoan thanh viewing.
 
-## 11. Contract API
+## 12. Contract API
 
 Base: `/api/v1/contracts`, role `AGENT|MANAGER|ADMIN`.
 
@@ -495,7 +533,7 @@ description=Ban scan
 primaryDocument=true
 ```
 
-## 12. Transaction va payment API
+## 13. Transaction va payment API
 
 Base: `/api/v1/transactions`, role `AGENT|MANAGER|ADMIN`.
 
@@ -514,7 +552,7 @@ Base: `/api/v1/transactions`, role `AGENT|MANAGER|ADMIN`.
 Frontend nen coi payment la record nghiep vu, khong phai payment gateway online.
 Dung `idempotencyKey` neu request tao payment/deposit co nguy co retry.
 
-## 13. Commission API
+## 14. Commission API
 
 ### Commission
 
@@ -536,7 +574,7 @@ Base: `/api/v1/commission-rules`, role `MANAGER|ADMIN`.
 | GET | `` | Search/list rules |
 | PUT | `/{ruleId}` | Cap nhat rule |
 
-## 14. Notification API
+## 15. Notification API
 
 Base: `/api/v1/notifications`, bearer auth.
 
@@ -549,7 +587,7 @@ Base: `/api/v1/notifications`, bearer auth.
 
 Dung polling nhe cho unread badge neu chua co WebSocket.
 
-## 15. Dashboard va report API
+## 16. Dashboard va report API
 
 ### Dashboard
 
@@ -575,7 +613,7 @@ Base: `/api/v1/reports`, role `MANAGER|ADMIN`.
 Nen them date range filter trong UI, vi report response duoc thiet ke cho
 dashboard va bieu do.
 
-## 16. Audit log API
+## 17. Audit log API
 
 Base: `/api/v1/audit-logs`, role `ADMIN`.
 
@@ -586,7 +624,7 @@ Base: `/api/v1/audit-logs`, role `ADMIN`.
 
 Dung cho man hinh admin, loc theo action/resource/actor/time.
 
-## 17. File upload API
+## 18. File upload API
 
 Base: `/api/v1/files`, role `AGENT|MANAGER|ADMIN`.
 
@@ -643,7 +681,7 @@ Backend storage config:
   `STORAGE_SIGNED_URL_TTL`.
 - Credentials must come from environment/config, never from frontend code.
 
-## 18. AI API
+## 19. AI API
 
 Tat ca nam duoi `/api/v1/ai`. Backend co provider abstraction va fallback/noop
 de app van chay duoc khi chua cau hinh provider that.
@@ -704,7 +742,7 @@ de app van chay duoc khi chua cau hinh provider that.
 }
 ```
 
-## 19. Enum frontend can map
+## 20. Enum frontend can map
 
 - `RoleCode`: `ADMIN`, `MANAGER`, `AGENT`, `CUSTOMER`, `OWNER`
 - `UserStatus`: `PENDING_VERIFICATION`, `ACTIVE`, `INACTIVE`, `LOCKED`
@@ -750,7 +788,7 @@ de app van chay duoc khi chua cau hinh provider that.
 - `AiMessageRole`: `USER`, `ASSISTANT`, `SYSTEM`
 - `AiRequestStatus`: `SUCCESS`, `FAILED`, `SKIPPED`, `TIMEOUT`
 
-## 20. Frontend implementation checklist
+## 21. Frontend implementation checklist
 
 ### API client
 
@@ -784,10 +822,9 @@ de app van chay duoc khi chua cau hinh provider that.
 - AI: dung nhu assistant phu, luu response vao form nhung cho user sua truoc
   khi submit chinh.
 
-## 21. Khoang trong backend frontend can biet
+## 22. Khoang trong backend frontend can biet
 
 - Da xoa legacy `/api/buildings/**`; frontend khong tich hop API nay.
-- Chua co master-data API public cho province/district/ward/property type/amenity/listing package/lead source. Neu UI can dropdown dong, can bo sung endpoint hoac seed/cau hinh frontend tam thoi.
 - Chua co API listing list/detail noi bo cho draft/pending. Moderation UI day du can backend bo sung.
 - Chua co owner portal rieng, du role `OWNER` da ton tai.
 - Chua co profile update/change password/forgot password/email verification UI flow du endpoint rieng.
@@ -795,7 +832,7 @@ de app van chay duoc khi chua cau hinh provider that.
 - Chua co WebSocket notification; dung polling.
 - AI co fallback/noop nen response co the la du lieu du phong khi chua cau hinh provider that.
 
-## 22. Demo flow end-to-end nen dung de test frontend
+## 23. Demo flow end-to-end nen dung de test frontend
 
 1. Login admin.
 2. Register agent, admin gan role/status neu can.

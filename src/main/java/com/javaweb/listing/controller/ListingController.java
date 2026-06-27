@@ -2,16 +2,23 @@ package com.javaweb.listing.controller;
 
 import com.javaweb.auth.security.AuthUserPrincipal;
 import com.javaweb.common.response.ApiResponse;
+import com.javaweb.common.response.PageResponse;
+import com.javaweb.listing.dto.InternalListingDetailResponse;
+import com.javaweb.listing.dto.InternalListingSearchRequest;
 import com.javaweb.listing.dto.ListingCreateRequest;
 import com.javaweb.listing.dto.ListingResponse;
 import com.javaweb.listing.dto.ListingUpdateRequest;
 import com.javaweb.listing.dto.RejectListingRequest;
 import com.javaweb.listing.service.ListingService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,11 +32,40 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/listings")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasAnyRole('AGENT', 'MANAGER', 'ADMIN')")
+@Validated
 public class ListingController {
     private final ListingService listingService;
 
     public ListingController(ListingService listingService) {
         this.listingService = listingService;
+    }
+
+    @GetMapping
+    @Operation(
+            summary = "Search internal listings",
+            description = """
+                    Search draft, pending, approved, rejected, unpublished, and published listings for internal listing and moderation screens. Agents see listings they created or listings for properties assigned to them; managers and admins see all listings.
+                    """
+    )
+    public ApiResponse<PageResponse<InternalListingDetailResponse>> search(
+            @Valid @ParameterObject InternalListingSearchRequest request,
+            @AuthenticationPrincipal AuthUserPrincipal actor
+    ) {
+        return ApiResponse.success(listingService.search(request, actor));
+    }
+
+    @GetMapping("/{listingId}")
+    @Operation(
+            summary = "Get internal listing detail",
+            description = """
+                    Return internal listing fields, property summary, creator, reviewer, package, status history, view count, and favorite count. Agents can read only listings they created or listings for assigned properties; managers and admins can read all listings.
+                    """
+    )
+    public ApiResponse<InternalListingDetailResponse> get(
+            @PathVariable Long listingId,
+            @AuthenticationPrincipal AuthUserPrincipal actor
+    ) {
+        return ApiResponse.success(listingService.get(listingId, actor));
     }
 
     @PostMapping

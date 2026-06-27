@@ -13,6 +13,8 @@ public interface ListingFavoriteRepository extends JpaRepository<ListingFavorite
 
     long deleteByListingIdAndUserId(Long listingId, Long userId);
 
+    long countByListingId(Long listingId);
+
     Page<ListingFavorite> findAllByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 
     @EntityGraph(attributePaths = {

@@ -419,6 +419,8 @@ Base: `/api/v1/listings`, role `AGENT|MANAGER|ADMIN`.
 
 | Method | Path | Role | Ghi chu |
 | --- | --- | --- | --- |
+| GET | `` | Agent+ | Search listing noi bo, gom draft/pending/moderation |
+| GET | `/{listingId}` | Agent+ | Detail listing noi bo |
 | POST | `` | Agent+ | Tao listing draft |
 | PUT | `/{listingId}` | Agent+ | Sua listing |
 | PATCH | `/{listingId}/submit` | Agent+ | Gui duyet |
@@ -447,12 +449,28 @@ Base: `/api/v1/listings`, role `AGENT|MANAGER|ADMIN`.
 }
 ```
 
-Luu y backend hien chua co `GET /api/v1/listings` va
-`GET /api/v1/listings/{id}` noi bo. Frontend nen:
+Internal listing search:
 
-- Lay listing da publish qua public search/detail.
-- Luu response create/update trong state de tiep tuc workflow.
-- Neu can man hinh moderation day du cho draft/pending, can bo sung backend API.
+```http
+GET /api/v1/listings?status=PENDING_REVIEW&purpose=SALE&createdBy=10&propertyId=5&keyword=apartment&page=0&size=20&sortBy=createdAt&sortDirection=DESC
+Authorization: Bearer <token>
+```
+
+Filter ho tro: `status`, `purpose`, `createdBy`, `propertyId`, `keyword`,
+`page`, `size`, `sortBy`, `sortDirection`. `sortBy` hop le: `id`, `code`,
+`title`, `status`, `purpose`, `askingPrice`, `createdAt`, `updatedAt`,
+`submittedAt`, `reviewedAt`, `publishedAt`, `viewCount`.
+
+Visibility: `MANAGER`/`ADMIN` xem tat ca listing chua xoa. `AGENT` chi xem
+listing minh tao hoac listing cua property duoc assign cho agent do.
+
+Response list la `ApiResponse<PageResponse<InternalListingDetailResponse>>`.
+Detail response gom listing fields, `property` summary, `creator`, `reviewer`,
+`listingPackage`, `statusHistory`, `viewCount`, `favoriteCount`, `createdAt`,
+`updatedAt`.
+
+`GET /api/v1/listings/{listingId}` tra cung shape
+`InternalListingDetailResponse`.
 
 ### 8.2 Public listing search
 

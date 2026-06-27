@@ -2,6 +2,7 @@ package com.javaweb.contract.repository;
 
 import com.javaweb.contract.entity.ContractDocument;
 import com.javaweb.contract.enums.ContractDocumentType;
+import com.javaweb.contract.enums.ContractStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -19,5 +20,12 @@ public interface ContractDocumentRepository extends JpaRepository<ContractDocume
     boolean existsByContractIdAndDocumentType(
             Long contractId,
             ContractDocumentType documentType
+    );
+
+    boolean existsByFileResourceId(Long fileResourceId);
+
+    boolean existsByFileResourceIdAndContractStatus(
+            Long fileResourceId,
+            ContractStatus status
     );
 }

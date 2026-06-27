@@ -26,6 +26,7 @@ app:
     rate-limit:
       enabled: false
   storage:
+    provider: local
     local-root: target/test-storage
   reminders:
     enabled: false

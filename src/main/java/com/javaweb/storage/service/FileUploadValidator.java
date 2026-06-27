@@ -43,7 +43,8 @@ public class FileUploadValidator {
         if (!StringUtils.hasText(rawName)
                 || rawName.contains("..")
                 || rawName.contains("/")
-                || rawName.contains("\\")) {
+                || rawName.contains("\\")
+                || rawName.chars().anyMatch(Character::isISOControl)) {
             throw new FileUploadException("File name is invalid");
         }
         String originalName = StringUtils.cleanPath(rawName);

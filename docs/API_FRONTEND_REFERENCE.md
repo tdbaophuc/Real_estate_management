@@ -1,24 +1,28 @@
-# Tài liệu API phục vụ phát triển Frontend
+# API Frontend Reference
 
-> Cập nhật theo mã nguồn branch `breakthrough` ngày 11/06/2026.
-> Phạm vi: các API hiện có đến Day 43, không bao gồm chức năng AI.
+> Cap nhat theo branch `breakthrough` ngay 13/06/2026.
+> Pham vi: backend da hoan thien sau Day 50, gom auth, property,
+> listing, CRM, lead, appointment, contract, transaction, commission,
+> notification, dashboard/report, audit, file upload va AI.
 
-## 1. Thông tin chung
+Tai lieu nay la nguon tham chieu chinh de xay frontend. Neu can schema day du
+tung field, mo Swagger UI tai `http://localhost:8081/swagger-ui.html`.
+
+## 1. Thong tin chung
 
 - Base URL local: `http://localhost:8081`
-- API prefix chính: `/api/v1`
+- API prefix chinh: `/api/v1`
 - Swagger UI: `http://localhost:8081/swagger-ui.html`
 - OpenAPI JSON: `http://localhost:8081/v3/api-docs`
-- Content type mặc định: `application/json`
-- Thời gian dạng thời điểm: ISO-8601 UTC, ví dụ `2026-06-10T08:30:00Z`
-- Ngày không kèm giờ: `yyyy-MM-dd`, ví dụ `2026-06-10`
-- Tiền tệ: mã 3 ký tự viết hoa, ví dụ `VND`, `USD`
-- Phân trang bắt đầu từ `page=0`; `size` tối đa `100`
-- Hướng sắp xếp: `ASC` hoặc `DESC`
+- Content type mac dinh: `application/json`
+- Multipart upload: `multipart/form-data`
+- Date-time: ISO-8601, vi du `2026-06-13T09:30:00Z`
+- Date: `yyyy-MM-dd`, vi du `2026-06-13`
+- Currency: ma 3 ky tu viet hoa, vi du `VND`, `USD`
+- Phan trang: `page` bat dau tu `0`, `size` toi da `100`
+- Sap xep: `sortBy`, `sortDirection=ASC|DESC`
 
-### Chạy backend local với Docker Compose
-
-Từ thư mục gốc repository:
+### Chay backend local
 
 ```powershell
 Copy-Item .env.example .env
@@ -32,20 +36,24 @@ Get-Content .env |
 mvn spring-boot:run
 ```
 
-Docker Compose cung cấp PostgreSQL (`5432`), Redis (`6379`), MinIO
-(`9000`/`9001`) và MailHog (`1025`/`8025`). Backend đang dùng trực
-tiếp PostgreSQL; upload vẫn lưu local và email dev vẫn ghi log. Nếu đổi
-`DB_NAME` hoặc `DB_PORT` trong `.env`, cần cập nhật `DB_URL` tương ứng.
+Docker Compose cung cap PostgreSQL, Redis, MinIO va MailHog. Backend hien dang
+dung PostgreSQL, upload local, email dev ghi log.
 
-Các API cần đăng nhập phải gửi:
+## 2. Auth, response va client rules
+
+### 2.1 Header auth
+
+Moi API bao ve can gui:
 
 ```http
 Authorization: Bearer <accessToken>
 ```
 
-## 2. Cấu trúc response
+Luu `accessToken`, `refreshToken`, `expiresInSeconds` sau login. Khi gap `401`,
+frontend nen goi `POST /api/v1/auth/refresh-token`; neu refresh that bai thi
+xoa session va ve login.
 
-### 2.1 Thành công
+### 2.2 Response thanh cong
 
 ```json
 {
@@ -53,13 +61,13 @@ Authorization: Bearer <accessToken>
   "code": "SUCCESS",
   "message": "Request processed successfully",
   "data": {},
-  "timestamp": "2026-06-10T08:30:00Z"
+  "timestamp": "2026-06-13T09:30:00Z"
 }
 ```
 
-Frontend luôn đọc dữ liệu nghiệp vụ từ `response.data`.
+Frontend luon doc du lieu nghiep vu tu `response.data`.
 
-### 2.2 Dữ liệu phân trang
+### 2.3 Response phan trang
 
 ```json
 {
@@ -73,985 +81,675 @@ Frontend luôn đọc dữ liệu nghiệp vụ từ `response.data`.
 }
 ```
 
-### 2.3 Lỗi
+### 2.4 Response loi
 
 ```json
 {
   "success": false,
   "code": "VALIDATION_ERROR",
-  "message": "Request validation failed",
+  "message": "Validation failed",
   "errors": [
     {
       "field": "email",
       "message": "email must be valid"
     }
   ],
-  "path": "/api/v1/auth/register",
-  "timestamp": "2026-06-10T08:30:00Z"
+  "timestamp": "2026-06-13T09:30:00Z"
 }
 ```
 
-Frontend nên xử lý:
+Mapping UI de nghi:
 
-- `400`: body/query không hợp lệ hoặc vi phạm quy tắc nghiệp vụ.
-- `401`: chưa đăng nhập, access token thiếu/hết hạn/không hợp lệ.
-- `403`: đã đăng nhập nhưng không đúng role hoặc không có quyền với dữ liệu.
-- `404`: tài nguyên không tồn tại.
-- `409`: dữ liệu trùng hoặc xung đột trạng thái nếu backend trả conflict.
-- `500`: lỗi ngoài dự kiến.
+- `400`: hien validation/form error.
+- `401`: refresh token hoac logout.
+- `403`: hien trang khong co quyen.
+- `404`: hien empty/not found state.
+- `409`: hien conflict toast, refresh data.
+- `429`: throttle UI, hien retry message.
+- `5xx`: hien error boundary/toast va nut retry.
 
-Khi nhận `401`, chỉ gọi refresh token một lần, cập nhật token và retry request gốc. Nếu refresh thất bại thì xóa phiên đăng nhập.
+### 2.5 Role
 
-## 3. Role và phạm vi giao diện
+- `ADMIN`: toan quyen, user management, audit, reports, dashboards.
+- `MANAGER`: duyet listing/contract, quan ly team, reports, commission.
+- `AGENT`: property, listing, CRM, lead, appointment, contract, transaction.
+- `CUSTOMER`: public search, favorite, AI chat.
+- `OWNER`: hien co role trong auth/AI chat, chua co owner portal rieng.
 
-| Role | Chức năng chính |
-|---|---|
-| `ADMIN` | Quản trị user, dashboard hệ thống, toàn bộ nghiệp vụ nội bộ |
-| `MANAGER` | Quản trị user, duyệt listing/contract, commission, dashboard quản lý |
-| `AGENT` | Property, listing, customer, lead, lịch hẹn, contract, transaction, commission cá nhân |
-| `CUSTOMER` | Lịch hẹn cá nhân, yêu thích listing, thông báo |
-| `OWNER` | Hiện chưa có controller nghiệp vụ riêng; có thể tham gia dữ liệu property/contract |
+## 3. Frontend modules nen xay
 
-Lưu ý:
+### Public
 
-- Role ở controller chỉ là lớp kiểm tra đầu tiên.
-- Service còn kiểm tra ownership/assignment. Ví dụ Agent thường chỉ thao tác dữ liệu được giao cho chính mình.
-- Frontend phải ẩn action không phù hợp role, nhưng backend vẫn là nguồn xác thực cuối cùng.
-- `/api/v1/admin/users` hiện cho cả `ADMIN` và `MANAGER`, dù URL chứa `admin`.
+- `/`: trang search listing public.
+- `/listing/:slug`: listing detail, record view bang `X-Session-Id`.
+- `/login`, `/register`.
 
-## 4. Authentication
+### Authenticated shell
 
-### Endpoint
+- `/dashboard`: dieu huong theo role.
+- `/properties`: list/detail/create/edit/images/status.
+- `/listings`: create/edit/workflow. Luu y backend chua co API list/detail
+  noi bo cho listing; can dung response sau create/update hoac public search
+  cho listing da publish.
+- `/customers`: CRM list/detail/notes/requirements/timeline.
+- `/leads`: pipeline list/detail/assign/status/notes/activities/follow-up.
+- `/appointments`: calendar/list/my/detail/confirm/cancel/reschedule/feedback.
+- `/contracts`: list/detail/create/update/upload/submit/approve/sign/cancel.
+- `/transactions`: list/detail/create/status/deposits/schedules/payments/invoices/receipts.
+- `/commissions`: my commissions, manager/admin list, rules.
+- `/notifications`: notification center va unread badge.
+- `/reports`: revenue, leads, transactions, commissions.
+- `/admin/users`: user management.
+- `/admin/audit-logs`: audit search/detail.
+- `/ai`: description assistant, recommendations, lead scoring, chat, image analysis.
 
-| Method | Endpoint | Auth | Request | Response data |
-|---|---|---|---|---|
-| `POST` | `/api/v1/auth/register` | Public | `RegisterRequest` | `RegisterResponse` |
-| `POST` | `/api/v1/auth/login` | Public | `LoginRequest` | `LoginResponse` |
-| `POST` | `/api/v1/auth/refresh-token` | Public | `RefreshTokenRequest` | `LoginResponse` |
-| `POST` | `/api/v1/auth/logout` | Public | `LogoutRequest` | `null` |
-| `GET` | `/api/v1/auth/me` | Bearer | Không có | `AuthUserResponse` |
+## 4. Auth API
 
-### Request
+Base: `/api/v1/auth`
 
-`RegisterRequest`
+| Method | Path | Auth | Ghi chu |
+| --- | --- | --- | --- |
+| POST | `/register` | Public | Tao user moi |
+| POST | `/login` | Public | Dang nhap |
+| POST | `/refresh-token` | Public | Lay access token moi |
+| POST | `/logout` | Public | Thu hoi refresh token |
+| GET | `/me` | Bearer | Lay user hien tai |
 
-| Field | Bắt buộc | Quy tắc |
-|---|---:|---|
-| `email` | Có | Email hợp lệ, tối đa 255 |
-| `password` | Có | 12-200 ký tự |
-| `fullName` | Có | Tối đa 150 |
-| `phone` | Không | 8-15 chữ số, có thể bắt đầu bằng `+` |
-
-`LoginRequest`: `email`, `password`.
-
-`RefreshTokenRequest` và `LogoutRequest`: `{ "refreshToken": "..." }`.
-
-### Response chính
-
-`LoginResponse`
+Request chinh:
 
 ```json
 {
-  "accessToken": "...",
-  "tokenType": "Bearer",
-  "expiresIn": 1800,
-  "refreshToken": "...",
-  "refreshExpiresIn": 2592000,
-  "user": {
-    "id": 1,
-    "email": "user@example.com",
-    "fullName": "User",
-    "status": "ACTIVE",
-    "roles": ["AGENT"],
-    "permissions": []
-  }
+  "email": "agent@example.com",
+  "password": "Strong@123"
 }
 ```
 
-`RegisterResponse`: `id`, `email`, `fullName`, `phone`, `status`, `roles`.
+Register can `email`, `password`, `fullName`, tuy vao schema Swagger co them
+phone/role neu backend cho phep. Password can co chu hoa, chu thuong, so va ky
+tu dac biet.
 
-`AuthUserResponse`: `id`, `email`, `fullName`, `status`, `roles`, `permissions`.
+## 5. Admin user management
 
-## 5. Quản trị người dùng
+Base: `/api/v1/admin/users`, role `ADMIN`.
 
-Role: `ADMIN`, `MANAGER`.
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| GET | `` | Danh sach user, co filter va phan trang |
+| GET | `/{userId}` | Chi tiet user |
+| PATCH | `/{userId}/status` | Doi `UserStatus` |
+| PUT | `/{userId}/roles` | Gan danh sach `RoleCode` |
 
-| Method | Endpoint | Mục đích |
-|---|---|---|
-| `GET` | `/api/v1/admin/users` | Danh sách user |
-| `GET` | `/api/v1/admin/users/{userId}` | Chi tiết user |
-| `PATCH` | `/api/v1/admin/users/{userId}/status` | Đổi trạng thái |
-| `PUT` | `/api/v1/admin/users/{userId}/roles` | Gán toàn bộ role |
+Dung cho man hinh quan ly tai khoan, khoa/mo user, promote agent/manager.
 
-Query danh sách:
+## 6. Property API
 
-- `page=0`
-- `size=20`
-- `sortBy=createdAt`
-- `direction=DESC`
+Base: `/api/v1/properties`, role `AGENT|MANAGER|ADMIN`.
 
-Request đổi trạng thái:
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| GET | `` | Search property |
+| GET | `/{propertyId}` | Chi tiet property |
+| POST | `` | Tao property |
+| PUT | `/{propertyId}` | Cap nhat property |
+| DELETE | `/{propertyId}` | Soft delete |
+| PATCH | `/{propertyId}/status` | Doi trang thai |
+| GET | `/{propertyId}/images` | Danh sach anh |
+| POST | `/{propertyId}/images` | Upload anh property |
+| DELETE | `/{propertyId}/images/{imageId}` | Xoa anh |
+| PATCH | `/{propertyId}/cover-image/{imageId}` | Dat cover |
 
-```json
-{ "status": "ACTIVE" }
-```
-
-Request gán role:
-
-```json
-{ "roles": ["AGENT", "OWNER"] }
-```
-
-`UserManagementResponse`: `id`, `email`, `fullName`, `phone`, `status`,
-`emailVerified`, `lockedUntil`, `lastLoginAt`, `createdAt`, `updatedAt`, `roles`.
-
-## 6. Property
-
-Role: `AGENT`, `MANAGER`, `ADMIN`.
-
-### Endpoint
-
-| Method | Endpoint | Request/Query | Response data |
-|---|---|---|---|
-| `GET` | `/api/v1/properties` | `PropertySearchRequest` | Page `PropertyResponse` |
-| `GET` | `/api/v1/properties/{propertyId}` | - | `PropertyResponse` |
-| `POST` | `/api/v1/properties` | `PropertyUpsertRequest` | `PropertyResponse` |
-| `PUT` | `/api/v1/properties/{propertyId}` | `PropertyUpsertRequest` | `PropertyResponse` |
-| `DELETE` | `/api/v1/properties/{propertyId}` | - | `null` |
-| `PATCH` | `/api/v1/properties/{propertyId}/status` | `{status}` | `PropertyResponse` |
-| `GET` | `/api/v1/properties/{propertyId}/images` | - | `PropertyImageResponse[]` |
-| `POST` | `/api/v1/properties/{propertyId}/images` | Multipart | `PropertyImageResponse` |
-| `DELETE` | `/api/v1/properties/{propertyId}/images/{imageId}` | - | `null` |
-| `PATCH` | `/api/v1/properties/{propertyId}/cover-image/{imageId}` | - | `PropertyImageResponse` |
-
-### Query tìm kiếm
-
-`keyword`, `propertyTypeId`, `purpose`, `provinceId`, `districtId`, `wardId`,
-`minPrice`, `maxPrice`, `minArea`, `maxArea`, `bedrooms`, `bathrooms`, `status`,
-`page=0`, `size=20`, `sortBy=createdAt`, `direction=DESC`.
-
-### Request tạo/cập nhật
+`PropertyUpsertRequest` can toi thieu:
 
 ```json
 {
   "code": "PROP-001",
-  "name": "Căn hộ trung tâm",
-  "description": "Mô tả",
+  "name": "Can ho 2PN Quan 1",
+  "description": "Mo ta bat dong san",
   "propertyTypeId": 1,
   "purpose": "SALE",
   "price": 3500000000,
   "currency": "VND",
-  "landArea": 80,
-  "floorArea": 75,
+  "landArea": 72.5,
+  "floorArea": 68.2,
   "bedrooms": 2,
   "bathrooms": 2,
   "floors": 1,
-  "direction": "SOUTHEAST",
+  "direction": "EAST",
   "legalStatus": "PINK_BOOK",
   "furnitureStatus": "FULLY_FURNISHED",
-  "videoUrl": null,
-  "virtualTourUrl": null,
-  "availableFrom": "2026-07-01",
-  "ownerId": 10,
-  "assignedAgentId": 20,
+  "availableFrom": "2026-06-13",
+  "ownerId": 5,
+  "assignedAgentId": 7,
   "address": {
     "provinceId": 1,
-    "districtId": 2,
-    "wardId": 3,
-    "streetAddress": "123 Nguyễn Huệ",
-    "fullAddress": "123 Nguyễn Huệ, ...",
+    "districtId": 1,
+    "wardId": 1,
+    "street": "Nguyen Hue",
+    "addressLine": "12 Nguyen Hue",
     "latitude": 10.7769,
     "longitude": 106.7009
   },
   "amenities": [
-    { "amenityId": 1, "details": "24/7" }
+    {
+      "amenityId": 1,
+      "note": "Ho boi"
+    }
   ]
 }
 ```
 
-Bắt buộc: `code`, `name`, `propertyTypeId`, `purpose`, `currency`, `address`,
-`address.provinceId`, `address.streetAddress`.
+Upload image:
 
-Upload image dùng `multipart/form-data`:
+```http
+POST /api/v1/properties/{propertyId}/images
+Content-Type: multipart/form-data
 
-- `file`: bắt buộc
-- `altText`: tùy chọn
-- `displayOrder`: mặc định `0`
+file=<binary>
+altText=Mat tien
+displayOrder=0
+```
 
-`PropertyResponse`: toàn bộ field request cùng `id`, tên/code của property type,
-owner, creator, assigned agent, address đã mở rộng, amenities, `status`,
-`createdAt`, `updatedAt`.
+## 7. Listing API
 
-`PropertyImageResponse`: `id`, `imageUrl`, `fileName`, `mimeType`, `fileSize`,
-`altText`, `coverImage`, `displayOrder`, uploader và `createdAt`.
+### 7.1 Internal listing workflow
 
-## 7. Listing và tìm kiếm công khai
+Base: `/api/v1/listings`, role `AGENT|MANAGER|ADMIN`.
 
-### 7.1 Quản lý listing
+| Method | Path | Role | Ghi chu |
+| --- | --- | --- | --- |
+| POST | `` | Agent+ | Tao listing draft |
+| PUT | `/{listingId}` | Agent+ | Sua listing |
+| PATCH | `/{listingId}/submit` | Agent+ | Gui duyet |
+| PATCH | `/{listingId}/approve` | Manager/Admin | Duyet |
+| PATCH | `/{listingId}/reject` | Manager/Admin | Tu choi, can reason |
+| PATCH | `/{listingId}/publish` | Agent+ | Publish neu hop le |
+| PATCH | `/{listingId}/unpublish` | Agent+ | Go publish |
 
-Role mặc định: `AGENT`, `MANAGER`, `ADMIN`.
-
-| Method | Endpoint | Role bổ sung | Request |
-|---|---|---|---|
-| `POST` | `/api/v1/listings` | - | `ListingCreateRequest` |
-| `PUT` | `/api/v1/listings/{listingId}` | - | `ListingUpdateRequest` |
-| `PATCH` | `/api/v1/listings/{listingId}/submit` | - | Không body |
-| `PATCH` | `/api/v1/listings/{listingId}/approve` | Manager/Admin | Không body |
-| `PATCH` | `/api/v1/listings/{listingId}/reject` | Manager/Admin | `{reason}` |
-| `PATCH` | `/api/v1/listings/{listingId}/publish` | - | Không body |
-| `PATCH` | `/api/v1/listings/{listingId}/unpublish` | - | Không body |
-
-Tạo listing:
+`ListingCreateRequest`:
 
 ```json
 {
   "propertyId": 1,
-  "code": "LIST-001",
-  "title": "Căn hộ 2 phòng ngủ",
-  "slug": "can-ho-2-phong-ngu",
-  "description": "Mô tả chi tiết",
+  "code": "LST-001",
+  "title": "Ban can ho 2PN trung tam",
+  "slug": "ban-can-ho-2pn-trung-tam",
+  "description": "Noi dung tin dang",
   "purpose": "SALE",
   "visibility": "PUBLIC",
   "askingPrice": 3500000000,
   "currency": "VND",
-  "listingPackageId": null,
-  "seoTitle": null,
-  "seoDescription": null,
-  "seoKeywords": null
+  "listingPackageId": 1,
+  "seoTitle": "Ban can ho 2PN Quan 1",
+  "seoDescription": "Tin dang can ho dep",
+  "seoKeywords": "can ho, quan 1"
 }
 ```
 
-Update không có `propertyId` và `code`; các field nội dung còn lại giống create.
+Luu y backend hien chua co `GET /api/v1/listings` va
+`GET /api/v1/listings/{id}` noi bo. Frontend nen:
 
-Luồng chính:
+- Lay listing da publish qua public search/detail.
+- Luu response create/update trong state de tiep tuc workflow.
+- Neu can man hinh moderation day du cho draft/pending, can bo sung backend API.
 
-`DRAFT/REJECTED -> PENDING_REVIEW -> APPROVED -> PUBLISHED -> UNPUBLISHED`
+### 7.2 Public listing search
 
-Backend quyết định chính xác transition hợp lệ. Frontend chỉ bật nút theo status hiện tại.
+Base: `/api/v1/search/listings`, public.
 
-`ListingResponse`: `id`, `code`, property, creator, package, nội dung, `purpose`,
-`status`, `visibility`, giá, SEO, reviewer, `rejectionReason`, các mốc thời gian,
-`viewCount`.
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| GET | `` | Search listing da publish |
+| GET | `/{slug}` | Chi tiet public va ghi view |
 
-Hiện chưa có API nội bộ `GET /api/v1/listings` hoặc `GET /api/v1/listings/{id}`.
-Frontend quản trị listing chưa thể tải danh sách/chi tiết nội bộ đầy đủ chỉ bằng API hiện tại.
-
-### 7.2 Tìm kiếm công khai
-
-Không cần đăng nhập.
-
-| Method | Endpoint | Mục đích |
-|---|---|---|
-| `GET` | `/api/v1/search/listings` | Tìm listing đã publish |
-| `GET` | `/api/v1/search/listings/{slug}` | Chi tiết và ghi nhận lượt xem |
-
-Query: `keyword`, `propertyTypeId`, `purpose`, vị trí, khoảng giá, khoảng diện tích,
-`bedrooms`, `bathrooms`, `page`, `size`, `sortBy`, `direction`.
-
-`sortBy` hỗ trợ: `price`, `askingPrice`, `publishedAt`, `createdAt`, `viewCount`.
-
-Khi xem chi tiết anonymous, frontend nên tạo và giữ header:
+Header tuy chon cho detail:
 
 ```http
-X-Session-Id: <uuid ổn định theo browser>
+X-Session-Id: browser-session-id
 ```
 
-`PublicListingResponse`: listing/property/type, nội dung, giá, diện tích, phòng,
-địa chỉ, `viewCount`, `publishedAt`, `createdAt`.
+Dung de ghi view cho khach chua dang nhap.
 
 ### 7.3 Favorite
 
-Chỉ role `CUSTOMER`.
+Base: `/api/v1/listings`, role `CUSTOMER|AGENT|MANAGER|ADMIN`.
 
-| Method | Endpoint |
-|---|---|
-| `POST` | `/api/v1/listings/{listingId}/favorite` |
-| `DELETE` | `/api/v1/listings/{listingId}/favorite` |
-| `GET` | `/api/v1/listings/favorites?page=0&size=20` |
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| POST | `/{listingId}/favorite` | Them favorite |
+| DELETE | `/{listingId}/favorite` | Bo favorite |
+| GET | `/favorites` | Danh sach favorite cua user |
 
-## 8. Customer CRM
+## 8. Customer CRM API
 
-Role: `AGENT`, `MANAGER`, `ADMIN`.
+Base: `/api/v1/customers`, role `AGENT|MANAGER|ADMIN`.
 
-| Method | Endpoint | Request/Response |
-|---|---|---|
-| `POST` | `/api/v1/customers` | `CustomerUpsertRequest` |
-| `GET` | `/api/v1/customers` | Query -> Page `CustomerResponse` |
-| `GET` | `/api/v1/customers/{customerId}` | `CustomerDetailResponse` |
-| `PUT` | `/api/v1/customers/{customerId}` | `CustomerUpsertRequest` |
-| `DELETE` | `/api/v1/customers/{customerId}` | `null` |
-| `POST` | `/api/v1/customers/{customerId}/notes` | `CustomerNoteRequest` |
-| `POST` | `/api/v1/customers/{customerId}/requirements` | `CustomerRequirementRequest` |
-| `GET` | `/api/v1/customers/{customerId}/timeline` | Timeline array |
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| POST | `` | Tao customer |
+| GET | `` | Search customer |
+| GET | `/{customerId}` | Detail gom notes/requirements lien quan |
+| PUT | `/{customerId}` | Cap nhat |
+| DELETE | `/{customerId}` | Soft delete |
+| POST | `/{customerId}/notes` | Them note |
+| POST | `/{customerId}/requirements` | Them nhu cau |
+| GET | `/{customerId}/timeline` | Timeline CRM |
 
-Query: `keyword`, `status`, `priority`, `assignedAgentId`, `page`, `size`,
-`sortBy=createdAt`, `direction=DESC`.
-
-`CustomerUpsertRequest`
+`CustomerUpsertRequest`:
 
 ```json
 {
   "code": "CUS-001",
-  "fullName": "Nguyễn Văn A",
+  "fullName": "Nguyen Van A",
   "email": "a@example.com",
   "phone": "0900000000",
   "status": "ACTIVE",
   "source": "WEBSITE",
   "priority": "HIGH",
   "preferredContactMethod": "PHONE",
-  "notes": null,
+  "notes": "Khach can mua trong thang nay",
   "userId": null,
-  "assignedAgentId": 20
+  "assignedAgentId": 7
 }
 ```
 
-Cần ít nhất một trong `email`, `phone`, `userId`.
+Can co it nhat mot trong `email`, `phone`, `userId`.
 
-Note: `{ "content": "...", "pinned": false }`.
+## 9. Lead API
 
-Requirement:
+Base: `/api/v1/leads`, role `AGENT|MANAGER|ADMIN`.
 
-```json
-{
-  "purpose": "SALE",
-  "propertyTypeId": 1,
-  "provinceId": 1,
-  "districtId": 2,
-  "wardId": 3,
-  "minBudget": 2000000000,
-  "maxBudget": 4000000000,
-  "currency": "VND",
-  "minArea": 50,
-  "maxArea": 100,
-  "minBedrooms": 2,
-  "minBathrooms": 1,
-  "description": "Gần trung tâm"
-}
-```
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| POST | `` | Tao lead |
+| GET | `` | Search lead |
+| GET | `/{leadId}` | Detail lead |
+| PATCH | `/{leadId}/assign` | Gan agent |
+| PATCH | `/{leadId}/status` | Doi pipeline status |
+| POST | `/{leadId}/notes` | Them note |
+| POST | `/{leadId}/activities` | Them activity |
+| POST | `/{leadId}/follow-up-tasks` | Tao task follow-up |
 
-`CustomerDetailResponse`: `{ customer, requirements, notes }`.
-
-Timeline item: `type`, `referenceId`, `title`, `description`, actor, `occurredAt`.
-
-## 9. Lead pipeline
-
-Role: `AGENT`, `MANAGER`, `ADMIN`.
-
-| Method | Endpoint | Request |
-|---|---|---|
-| `POST` | `/api/v1/leads` | `LeadCreateRequest` |
-| `GET` | `/api/v1/leads` | `LeadSearchRequest` |
-| `GET` | `/api/v1/leads/{leadId}` | - |
-| `PATCH` | `/api/v1/leads/{leadId}/assign` | `LeadAssignRequest` |
-| `PATCH` | `/api/v1/leads/{leadId}/status` | `LeadStatusUpdateRequest` |
-| `POST` | `/api/v1/leads/{leadId}/notes` | `LeadNoteRequest` |
-| `POST` | `/api/v1/leads/{leadId}/activities` | `LeadActivityRequest` |
-| `POST` | `/api/v1/leads/{leadId}/follow-up-tasks` | `FollowUpTaskRequest` |
-
-Query: `keyword`, `status`, `priority`, `sourceId`, `assignedAgentId`, `page`,
-`size`, `sortBy=createdAt`, `direction=DESC`.
-
-Tạo lead:
+`LeadCreateRequest`:
 
 ```json
 {
   "code": "LEAD-001",
   "sourceCode": "WEBSITE",
-  "fullName": "Khách hàng",
-  "email": "lead@example.com",
-  "phone": null,
+  "fullName": "Tran Thi B",
+  "email": "b@example.com",
+  "phone": "0911111111",
   "priority": "HIGH",
-  "message": "Quan tâm listing",
+  "message": "Quan tam listing LST-001",
   "customerId": null,
-  "listingId": 10,
-  "assignedAgentId": 20
+  "listingId": 1,
+  "assignedAgentId": 7
 }
 ```
 
-Cần ít nhất một trong `email`, `phone`, `customerId`.
+Can co it nhat mot trong `email`, `phone`, `customerId`.
 
-Assign: `{ "agentId": 20, "notes": "Phân công" }`.
+## 10. Appointment API
 
-Đổi status: `{ "status": "CONTACTED", "reason": null }`.
+Base: `/api/v1/appointments`, role `AGENT|MANAGER|ADMIN` cho quan ly.
 
-Luồng pipeline:
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| POST | `` | Tao lich hen/viewing |
+| GET | `` | Search lich hen |
+| GET | `/my` | Lich hen cua user hien tai |
+| GET | `/{appointmentId}` | Chi tiet |
+| PATCH | `/{appointmentId}/confirm` | Xac nhan |
+| PATCH | `/{appointmentId}/cancel` | Huy, can reason |
+| PATCH | `/{appointmentId}/reschedule` | Doi lich |
+| PATCH | `/{appointmentId}/complete` | Hoan thanh |
+| POST | `/{appointmentId}/feedback` | Gui viewing feedback |
 
-`NEW -> ASSIGNED -> CONTACTED -> INTERESTED -> VIEWING_SCHEDULED -> NEGOTIATING -> CLOSED_WON/CLOSED_LOST`
+Nen xay UI calendar, conflict warning, status badge va form feedback sau khi
+hoan thanh viewing.
 
-`INVALID`, `CLOSED_WON`, `CLOSED_LOST` là trạng thái kết thúc. Lead phải được assign
-trước khi đi sâu vào pipeline.
+## 11. Contract API
 
-Activity:
+Base: `/api/v1/contracts`, role `AGENT|MANAGER|ADMIN`.
+
+| Method | Path | Role | Ghi chu |
+| --- | --- | --- | --- |
+| POST | `` | Agent+ | Tao contract |
+| GET | `` | Agent+ | Search contract |
+| GET | `/{contractId}` | Agent+ | Chi tiet |
+| PUT | `/{contractId}` | Agent+ | Cap nhat draft |
+| POST | `/{contractId}/documents` | Agent+ | Upload tai lieu |
+| PATCH | `/{contractId}/submit-review` | Agent+ | Gui duyet |
+| PATCH | `/{contractId}/approve` | Manager/Admin | Duyet |
+| PATCH | `/{contractId}/mark-signed` | Agent+ | Danh dau da ky |
+| PATCH | `/{contractId}/cancel` | Agent+ | Huy |
+
+Upload document:
+
+```http
+POST /api/v1/contracts/{contractId}/documents
+Content-Type: multipart/form-data
+
+file=<binary>
+documentType=SIGNED
+displayName=Hop dong da ky
+description=Ban scan
+primaryDocument=true
+```
+
+## 12. Transaction va payment API
+
+Base: `/api/v1/transactions`, role `AGENT|MANAGER|ADMIN`.
+
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| POST | `` | Tao transaction |
+| GET | `` | Search transaction |
+| GET | `/{transactionId}` | Chi tiet |
+| PATCH | `/{transactionId}/status` | Doi status |
+| POST | `/{transactionId}/deposits` | Ghi nhan deposit |
+| POST | `/{transactionId}/payment-schedules` | Tao lich thanh toan |
+| POST | `/{transactionId}/payments` | Ghi nhan payment offline/external |
+| POST | `/{transactionId}/invoices` | Tao invoice metadata |
+| POST | `/{transactionId}/payments/{paymentId}/receipt` | Tao receipt metadata |
+
+Frontend nen coi payment la record nghiep vu, khong phai payment gateway online.
+Dung `idempotencyKey` neu request tao payment/deposit co nguy co retry.
+
+## 13. Commission API
+
+### Commission
+
+Base: `/api/v1/commissions`.
+
+| Method | Path | Role | Ghi chu |
+| --- | --- | --- | --- |
+| GET | `/my` | Agent+ | Commission cua user hien tai |
+| GET | `` | Manager/Admin | Search tat ca commission |
+| PATCH | `/{commissionId}/mark-paid` | Manager/Admin | Danh dau da chi tra |
+
+### Commission rules
+
+Base: `/api/v1/commission-rules`, role `MANAGER|ADMIN`.
+
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| POST | `` | Tao rule |
+| GET | `` | Search/list rules |
+| PUT | `/{ruleId}` | Cap nhat rule |
+
+## 14. Notification API
+
+Base: `/api/v1/notifications`, bearer auth.
+
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| GET | `` | List notification cua user |
+| GET | `/unread-count` | So unread |
+| PATCH | `/{notificationId}/read` | Mark one read |
+| PATCH | `/read-all` | Mark all read |
+
+Dung polling nhe cho unread badge neu chua co WebSocket.
+
+## 15. Dashboard va report API
+
+### Dashboard
+
+Base: `/api/v1/dashboard`
+
+| Method | Path | Role |
+| --- | --- | --- |
+| GET | `/admin` | ADMIN |
+| GET | `/manager` | MANAGER/ADMIN |
+| GET | `/agent` | AGENT/MANAGER/ADMIN |
+
+### Reports
+
+Base: `/api/v1/reports`, role `MANAGER|ADMIN`.
+
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| GET | `/revenue` | Bao cao doanh thu |
+| GET | `/leads` | Bao cao lead |
+| GET | `/transactions` | Bao cao giao dich |
+| GET | `/commissions` | Bao cao commission |
+
+Nen them date range filter trong UI, vi report response duoc thiet ke cho
+dashboard va bieu do.
+
+## 16. Audit log API
+
+Base: `/api/v1/audit-logs`, role `ADMIN`.
+
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| GET | `` | Search audit logs |
+| GET | `/{auditLogId}` | Detail audit log |
+
+Dung cho man hinh admin, loc theo action/resource/actor/time.
+
+## 17. File upload API
+
+Base: `/api/v1/files`, role `AGENT|MANAGER|ADMIN`.
+
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| POST | `/upload` | Upload file chung |
+| GET | `/{fileId}` | Metadata file neu uploader/manager/admin |
+| GET | `/{fileId}/download` | Download stream hoac redirect direct/signed URL |
+| DELETE | `/{fileId}` | Xoa file chua link voi resource khac |
+| PATCH | `/{fileId}/access-level` | Manager/admin doi `PUBLIC`/`PRIVATE` |
+
+```http
+POST /api/v1/files/upload
+Content-Type: multipart/form-data
+
+file=<binary>
+accessLevel=PRIVATE
+```
+
+Upload response includes storage metadata:
+
+- `storageProvider`: `LOCAL` or `R2`.
+- `storageKey`: internal backend object key, not for direct frontend use.
+- `checksumSha256`: SHA-256 checksum calculated while storing the object.
+- `accessLevel`: `PUBLIC` or `PRIVATE`.
+- `publicUrl`: present only when a public file has a direct public URL.
+
+Download behavior:
+
+- `PUBLIC` file with safe `publicUrl`: backend returns `302 Location`.
+- `PRIVATE` file: backend enforces authorization, then either streams bytes or
+  returns `302 Location` to a short-lived signed URL when the active provider
+  supports it.
+- Treat `403` as no permission and `404` as missing/deleted file.
+
+Access-level request:
 
 ```json
 {
-  "activityType": "CALL",
-  "subject": "Gọi tư vấn",
-  "details": "...",
-  "occurredAt": "2026-06-10T08:30:00Z"
+  "accessLevel": "PUBLIC"
 }
 ```
 
-Frontend không được tạo thủ công activity type `STATUS_CHANGE` và `ASSIGNMENT`.
+Delete is allowed only for unlinked files. Files linked to signed contracts,
+verified legal documents, property images, or other existing file links are
+blocked by backend business rules.
 
-Follow-up task:
+Backend storage config:
+
+- Local remains the default for development and tests with `STORAGE_PROVIDER=local`.
+- Cloudflare R2 uses the S3-compatible API with `STORAGE_PROVIDER=r2`,
+  `STORAGE_BUCKET`, `STORAGE_ENDPOINT`, `STORAGE_REGION`, `STORAGE_ACCESS_KEY`,
+  `STORAGE_SECRET_KEY`, optional `STORAGE_PUBLIC_BASE_URL`, and
+  `STORAGE_SIGNED_URL_TTL`.
+- Credentials must come from environment/config, never from frontend code.
+
+## 18. AI API
+
+Tat ca nam duoi `/api/v1/ai`. Backend co provider abstraction va fallback/noop
+de app van chay duoc khi chua cau hinh provider that.
+
+| Method | Path | Role | Ghi chu |
+| --- | --- | --- | --- |
+| POST | `/listing-description` | Agent+ | Sinh/cai thien mo ta listing |
+| POST | `/customers/{customerId}/recommendations` | Agent+ | Goi y listing cho customer |
+| POST | `/leads/{leadId}/score` | Agent+ | Cham diem lead |
+| GET | `/customers/{customerId}/summary` | Agent+ | Tom tat customer |
+| POST | `/property-images/analyze` | Agent+ | Phan tich anh property |
+| POST | `/chat/sessions` | Customer/Agent+ | Tao chat session |
+| POST | `/chat/sessions/{sessionId}/messages` | Customer/Agent+ | Gui message |
+| GET | `/chat/sessions/{sessionId}` | Customer/Agent+ | Lay session/messages |
+
+### Listing description
 
 ```json
 {
-  "title": "Gọi lại",
-  "description": null,
-  "priority": "HIGH",
-  "dueAt": "2026-06-11T08:30:00Z",
-  "assignedAgentId": 20
+  "listingId": 1,
+  "tone": "PROFESSIONAL",
+  "language": "vi",
+  "includeSeo": true,
+  "extraInstructions": "Nhan manh vi tri va tien ich"
 }
 ```
 
-`LeadDetailResponse`: `{ lead, assignments, notes, activities, followUpTasks }`.
-
-Hiện chưa có endpoint đổi trạng thái follow-up task.
-
-## 10. Appointment
-
-Role chung: `CUSTOMER`, `AGENT`, `MANAGER`, `ADMIN`.
-
-| Method | Endpoint | Role/Ghi chú |
-|---|---|---|
-| `POST` | `/api/v1/appointments` | Tạo lịch |
-| `GET` | `/api/v1/appointments` | Agent/Manager/Admin |
-| `GET` | `/api/v1/appointments/my?page=0&size=20` | Người đang đăng nhập |
-| `GET` | `/api/v1/appointments/{appointmentId}` | Theo quyền truy cập |
-| `PATCH` | `/api/v1/appointments/{appointmentId}/confirm` | Confirm |
-| `PATCH` | `/api/v1/appointments/{appointmentId}/cancel` | `{reason}` |
-| `PATCH` | `/api/v1/appointments/{appointmentId}/reschedule` | Lịch mới |
-| `PATCH` | `/api/v1/appointments/{appointmentId}/complete` | Complete |
-| `POST` | `/api/v1/appointments/{appointmentId}/feedback` | Feedback |
-
-Query danh sách: `status`, `agentId`, `customerId`, `propertyId`, `from`, `to`,
-`page=0`, `size=20`, `sortBy=startAt`, `direction=ASC`.
-
-Tạo lịch:
+### Recommendation
 
 ```json
 {
-  "code": "APT-001",
-  "customerId": 1,
-  "agentId": 20,
-  "propertyId": 5,
-  "listingId": 10,
-  "leadId": 8,
-  "title": "Xem căn hộ",
-  "startAt": "2026-06-15T02:00:00Z",
-  "endAt": "2026-06-15T03:00:00Z",
-  "timezone": "Asia/Ho_Chi_Minh",
-  "meetingLocation": "Tại dự án",
-  "notes": null
+  "limit": 10,
+  "purpose": "SALE",
+  "maxPrice": 5000000000,
+  "currency": "VND"
 }
 ```
 
-`startAt`, `endAt` phải ở tương lai và `endAt > startAt`. Customer phải active,
-property phải `AVAILABLE`; listing/lead nếu có phải khớp các đối tượng đã chọn.
-
-Luồng:
-
-- `PENDING -> CONFIRMED`
-- `PENDING/CONFIRMED -> CANCELLED`
-- `PENDING/CONFIRMED -> RESCHEDULED` và sinh lịch mới
-- `CONFIRMED -> COMPLETED`
-- Chỉ lịch `COMPLETED` mới nhận feedback
-
-Feedback: `rating` 1-5 tùy chọn, `interestLevel` bắt buộc, cùng `comments`,
-`positivePoints`, `concerns`, `nextAction`.
-
-`AppointmentResponse` chứa dữ liệu liên kết, thời gian, trạng thái,
-`participants[]`, `feedbacks[]`.
-
-## 11. Contract
-
-Role: `AGENT`, `MANAGER`, `ADMIN`; approve chỉ `MANAGER`, `ADMIN`.
-
-| Method | Endpoint | Request |
-|---|---|---|
-| `POST` | `/api/v1/contracts` | `ContractCreateRequest` |
-| `GET` | `/api/v1/contracts` | Search query |
-| `GET` | `/api/v1/contracts/{contractId}` | - |
-| `PUT` | `/api/v1/contracts/{contractId}` | `ContractUpdateRequest` |
-| `POST` | `/api/v1/contracts/{contractId}/documents` | Multipart |
-| `PATCH` | `/api/v1/contracts/{contractId}/submit-review` | - |
-| `PATCH` | `/api/v1/contracts/{contractId}/approve` | Manager/Admin |
-| `PATCH` | `/api/v1/contracts/{contractId}/mark-signed` | - |
-| `PATCH` | `/api/v1/contracts/{contractId}/cancel` | `{reason}` |
-
-Query: `status`, `contractType`, `propertyId`, `customerId`, `agentId`, `page`,
-`size`, `sortBy=createdAt`, `direction=DESC`.
-
-Create:
+### Lead scoring
 
 ```json
 {
-  "code": "CTR-001",
-  "contractType": "SALE",
-  "propertyId": 1,
-  "customerId": 2,
-  "agentId": 20,
-  "templateId": null,
-  "title": "Hợp đồng mua bán",
-  "totalValue": 3500000000,
-  "currency": "VND",
-  "effectiveDate": "2026-06-15",
-  "expirationDate": "2026-12-15",
-  "terms": "...",
-  "notes": null
+  "forceRefresh": false
 }
 ```
 
-Update chỉ gồm: `title`, `totalValue`, `currency`, `effectiveDate`,
-`expirationDate`, `terms`, `notes`.
-
-Upload document multipart:
-
-- `file`
-- `documentType`: `DRAFT|FINAL|SIGNED|ATTACHMENT`
-- `displayName`: tùy chọn
-- `description`: tùy chọn
-- `primaryDocument`: mặc định `false`
-
-Luồng chính:
-
-`DRAFT -> PENDING_REVIEW -> PENDING_SIGNATURE -> SIGNED`
-
-Contract có thể bị cancel ở các trạng thái backend cho phép.
-
-`ContractResponse` chứa thông tin contract, property/customer/owner/agent,
-giá trị, thời hạn, các mốc trạng thái, `parties[]`, `documents[]`.
-
-## 12. Transaction và ghi nhận thanh toán ngoài hệ thống
-
-Role: `AGENT`, `MANAGER`, `ADMIN`.
-
-Hệ thống hiện **không tích hợp cổng thanh toán**. Các endpoint payment/deposit chỉ
-ghi nhận giao dịch đã thực hiện bên ngoài như chuyển khoản, tiền mặt hoặc ví điện tử.
-
-### Endpoint
-
-| Method | Endpoint | Request |
-|---|---|---|
-| `POST` | `/api/v1/transactions` | `TransactionCreateRequest` |
-| `GET` | `/api/v1/transactions` | Search query |
-| `GET` | `/api/v1/transactions/{transactionId}` | - |
-| `PATCH` | `/api/v1/transactions/{transactionId}/status` | `{status, reason}` |
-| `POST` | `/api/v1/transactions/{transactionId}/deposits` | `DepositCreateRequest` |
-| `POST` | `/api/v1/transactions/{transactionId}/payment-schedules` | `PaymentScheduleCreateRequest` |
-| `POST` | `/api/v1/transactions/{transactionId}/payments` | `PaymentCreateRequest` |
-| `POST` | `/api/v1/transactions/{transactionId}/invoices` | `InvoiceCreateRequest` |
-| `POST` | `/api/v1/transactions/{transactionId}/payments/{paymentId}/receipt` | `ReceiptCreateRequest` |
-
-Query: `status`, `transactionType`, `propertyId`, `customerId`, `agentId`, `page`,
-`size`, `sortBy=createdAt`, `direction=DESC`.
-
-Create:
+### Chat
 
 ```json
 {
-  "code": "TX-001",
-  "contractId": 10,
-  "propertyId": 1,
-  "customerId": 2,
-  "agentId": 20,
-  "transactionType": "SALE",
-  "agreedValue": 3500000000,
-  "currency": "VND",
-  "transactionDate": "2026-06-15",
-  "expectedCompletionDate": "2026-07-15",
-  "notes": null
+  "title": "Tu van mua nha"
 }
 ```
-
-Nếu có `contractId`, contract phải `SIGNED` hoặc `ACTIVE`.
-
-Status update:
-
-```json
-{ "status": "COMPLETED", "reason": null }
-```
-
-`reason` bắt buộc khi chuyển sang `CANCELLED`.
-
-Luồng tổng quát:
-
-`PENDING -> DEPOSITED -> CONTRACT_SIGNED -> PAYMENT_IN_PROGRESS -> COMPLETED`
-
-Các nhánh kết thúc: `CANCELLED`, `REFUNDED`. Transaction kết thúc không thể sửa.
-Backend kiểm tra tiền xác nhận trước khi `COMPLETED`/`REFUNDED`.
-
-### Deposit
 
 ```json
 {
-  "amount": 200000000,
-  "currency": "VND",
-  "paymentMethod": "BANK_TRANSFER",
-  "referenceNumber": "BANK-REF-001",
-  "idempotencyKey": "deposit-tx-1-v1",
-  "dueDate": "2026-06-20",
-  "receivedAt": "2026-06-15T08:30:00Z",
-  "notes": null
+  "content": "Toi can can ho 2 phong ngu tai Quan 1"
 }
 ```
 
-Deposit được ghi nhận và verify ngay theo flow hiện tại; có thể đưa transaction từ
-`PENDING` sang `DEPOSITED`.
-
-### Payment schedule
-
-`installmentNumber`, `label`, `dueDate`, `amount`, `currency`, `notes`.
-
-### Payment ngoài hệ thống
-
-`paymentScheduleId` tùy chọn, `amount`, `currency`, `paymentMethod`,
-`referenceNumber`, `idempotencyKey`, `paidAt`, `notes`.
-
-Frontend phải tạo `idempotencyKey` duy nhất cho mỗi thao tác để tránh ghi nhận tiền
-hai lần khi người dùng double-click hoặc retry.
-
-### Invoice
-
-`invoiceNumber`, `issueDate`, `dueDate`, `subtotal`, `taxAmount`, `currency`,
-`billedToName`, `billedToEmail`, `billedToAddress`, `notes`.
-
-### Receipt
-
-`receiptNumber`, `issuedAt`, `payerName`, `notes`. Payment phải thuộc transaction
-và đã `COMPLETED`.
-
-`TransactionResponse` chứa số tiền thỏa thuận/xác nhận/còn lại và các mảng:
-`deposits`, `paymentSchedules`, `payments`, `invoices`.
-
-## 13. Commission
-
-### Commission cá nhân và quản lý
-
-| Method | Endpoint | Role |
-|---|---|---|
-| `GET` | `/api/v1/commissions/my` | Agent/Manager/Admin |
-| `GET` | `/api/v1/commissions` | Manager/Admin |
-| `PATCH` | `/api/v1/commissions/{commissionId}/mark-paid` | Manager/Admin |
-
-Query: `status`, `transactionId`, `beneficiaryUserId`, `page`, `size`,
-`sortBy=createdAt`, `direction=DESC`.
-
-Mark paid:
-
-```json
-{
-  "paymentReference": "COM-PAY-001",
-  "paidAt": "2026-06-10T08:30:00Z",
-  "notes": null
-}
-```
-
-`CommissionResponse`: transaction/rule/beneficiary, calculation type, base amount,
-rate, amount, currency, approval/payment metadata, status và timestamps.
-
-### Commission rule
-
-Role: `MANAGER`, `ADMIN`.
-
-| Method | Endpoint |
-|---|---|
-| `POST` | `/api/v1/commission-rules` |
-| `GET` | `/api/v1/commission-rules` |
-| `PUT` | `/api/v1/commission-rules/{ruleId}` |
-
-Query: `active`, `transactionType`, `page`, `size`, `sortBy=priority`,
-`direction=DESC`.
-
-Rule:
-
-```json
-{
-  "code": "SALE_DEFAULT",
-  "name": "Hoa hồng bán mặc định",
-  "transactionType": "SALE",
-  "calculationType": "PERCENTAGE",
-  "rate": 2.5,
-  "fixedAmount": null,
-  "currency": "VND",
-  "minTransactionValue": 0,
-  "maxTransactionValue": null,
-  "priority": 10,
-  "active": true,
-  "effectiveFrom": "2026-01-01",
-  "effectiveTo": null,
-  "description": null
-}
-```
-
-`PERCENTAGE` yêu cầu `rate` và không có `fixedAmount`; `FIXED` thì ngược lại.
-
-## 14. Notification
-
-Mọi user đã đăng nhập.
-
-| Method | Endpoint | Response |
-|---|---|---|
-| `GET` | `/api/v1/notifications?unread=true&page=0&size=20` | Page notification |
-| `GET` | `/api/v1/notifications/unread-count` | `{unreadCount}` |
-| `PATCH` | `/api/v1/notifications/{notificationId}/read` | Notification |
-| `PATCH` | `/api/v1/notifications/read-all` | `{updatedCount}` |
-
-Notification: `id`, `type`, `title`, `message`, `actionUrl`, `referenceType`,
-`referenceId`, `metadataJson`, `read`, `readAt`, `createdAt`.
-
-Frontend nên:
-
-- Poll `unread-count` theo chu kỳ phù hợp.
-- Điều hướng bằng `actionUrl`.
-- Parse `metadataJson` có kiểm tra lỗi vì đây là chuỗi JSON nullable.
-
-## 15. Dashboard
-
-| Method | Endpoint | Role |
-|---|---|---|
-| `GET` | `/api/v1/dashboard/admin` | Admin |
-| `GET` | `/api/v1/dashboard/manager` | Manager/Admin |
-| `GET` | `/api/v1/dashboard/agent` | Agent/Manager/Admin |
-
-Admin response:
-
-- `totalUsers`
-- `totalProperties`
-- `totalListings`
-- `pendingListings`
-- `totalLeads`, `leadsByStatus[]`
-- `totalTransactions`, `transactionsByStatus[]`
-- `revenueSummary[]`
-- `topAgents[]`
-
-Manager response:
-
-- `totalAgents`
-- Lead totals/status và `leadCloseRate`
-- Transaction totals/status
-- `pendingCommissions`, `paidCommissions`
-- `revenueSummary[]`
-- `topAgents[]`
-
-Revenue được tách theo `currency`; frontend không cộng trực tiếp VND và USD:
-
-```json
-{
-  "currency": "VND",
-  "completedTransactions": 10,
-  "completedTransactionValue": 10000000000,
-  "completedPayments": 8000000000,
-  "verifiedDeposits": 1000000000,
-  "paidCommissions": 200000000
-}
-```
-
-`TopAgentResponse`: `agentId`, `agentName`, `totalTransactions`,
-`completedTransactions`.
-
-Manager dashboard hiện là số liệu toàn hệ thống vì schema chưa có team/manager-agent mapping.
-
-Agent response:
-
-- `myLeads`, `myLeadsByStatus[]`
-- `todayAppointments`
-- `followUpTasks`, `overdueFollowUpTasks`
-- `activeTransactions`, `activeTransactionsByStatus[]`
-- `myCommissions`, `myCommissionsByStatus[]`
-- `myCommissionAmounts[]`, tách theo `currency`
-
-### Báo cáo
-
-Role: `MANAGER`, `ADMIN`.
-
-Tất cả endpoint báo cáo bắt buộc query `from` và `to` dạng `yyyy-MM-dd`.
-
-| Method | Endpoint | Response |
-|---|---|---|
-| `GET` | `/api/v1/reports/revenue?from=2026-06-01&to=2026-06-30` | `RevenueReportResponse` |
-| `GET` | `/api/v1/reports/leads?from=2026-06-01&to=2026-06-30` | `LeadReportResponse` |
-| `GET` | `/api/v1/reports/transactions?from=2026-06-01&to=2026-06-30` | `TransactionReportResponse` |
-| `GET` | `/api/v1/reports/commissions?from=2026-06-01&to=2026-06-30` | `CommissionReportResponse` |
-
-Khoảng ngày tính cả `from` và `to`; `from` không được sau `to`.
-
-## 16. Audit log
-
-Role: chỉ `ADMIN`.
-
-| Method | Endpoint | Mục đích |
-|---|---|---|
-| `GET` | `/api/v1/audit-logs` | Danh sách audit log có phân trang/lọc |
-| `GET` | `/api/v1/audit-logs/{auditLogId}` | Chi tiết audit log |
-
-Query danh sách:
-
-- `actorId`, `action`, `resourceType`, `resourceId`
-- `from`, `to`: ISO-8601 timestamp
-- `page`, `size`, `sortBy`, `direction`
-- `sortBy`: `createdAt`, `action`, `resourceType`, `resourceId`
-
-`AuditLogResponse`: `id`, thông tin actor (`actorId`, `actorEmail`,
-`actorName`), `action`, `resourceType`, `resourceId`, `oldValue`, `newValue`,
-`createdAt`. `oldValue` và `newValue` là JSON object nullable.
-
-Action hiện có:
-
-```text
-USER_STATUS_CHANGED, USER_ROLES_CHANGED, LISTING_APPROVED, LISTING_REJECTED,
-TRANSACTION_STATUS_CHANGED, CONTRACT_STATUS_CHANGED, COMMISSION_PAID
-```
-
-## 17. File upload độc lập
-
-Role: `AGENT`, `MANAGER`, `ADMIN`.
-
-`POST /api/v1/files/upload`, multipart:
-
-- `file`: bắt buộc
-- `accessLevel`: `PUBLIC` hoặc `PRIVATE`, mặc định `PRIVATE`
-
-Loại file cho phép hiện tại:
-
-- `image/jpeg`
-- `image/png`
-- `image/webp`
-- `application/pdf`
-
-Giới hạn mặc định: file `10MB`, request multipart `11MB`.
-
-`FileResourceResponse`: `id`, `originalFileName`, `contentType`, `fileSize`,
-`checksumSha256`, `storageProvider`, `accessLevel`, `publicUrl`, `uploadedById`,
-`createdAt`.
-
-Không có API download file private trong controller hiện tại.
-
-## 18. Danh sách enum frontend
-
-```text
-RoleCode: ADMIN, MANAGER, AGENT, CUSTOMER, OWNER
-UserStatus: PENDING_VERIFICATION, ACTIVE, INACTIVE, LOCKED
-
-PropertyPurpose: SALE, RENT
-PropertyStatus: DRAFT, AVAILABLE, RESERVED, SOLD, RENTED, INACTIVE, DELETED
-PropertyDirection: NORTH, NORTHEAST, EAST, SOUTHEAST, SOUTH, SOUTHWEST, WEST, NORTHWEST
-PropertyLegalStatus: PINK_BOOK, RED_BOOK, SALE_CONTRACT, WAITING_FOR_CERTIFICATE, OTHER, UNKNOWN
-FurnitureStatus: UNFURNISHED, PARTIALLY_FURNISHED, FULLY_FURNISHED
-AmenityCategory: ACCESS, SECURITY, LEISURE, FEATURE
-
-ListingPurpose: SALE, RENT
-ListingStatus: DRAFT, PENDING_REVIEW, APPROVED, REJECTED, PUBLISHED, UNPUBLISHED, EXPIRED, SOLD, RENTED
-ListingVisibility: PUBLIC, INTERNAL, PRIVATE
-
-CustomerStatus: ACTIVE, INACTIVE, ARCHIVED
-CustomerSource: MANUAL, WEBSITE, REFERRAL, IMPORT, OTHER
-CustomerPriority: LOW, MEDIUM, HIGH
-
-LeadPipelineStatus: NEW, ASSIGNED, CONTACTED, INTERESTED, VIEWING_SCHEDULED,
-  NEGOTIATING, CLOSED_WON, CLOSED_LOST, INVALID
-LeadPriority: LOW, MEDIUM, HIGH
-LeadActivityType: CALL, EMAIL, CHAT, MEETING, STATUS_CHANGE, ASSIGNMENT, OTHER
-FollowUpTaskStatus: PENDING, IN_PROGRESS, COMPLETED, CANCELLED
-
-AppointmentStatus: PENDING, CONFIRMED, CANCELLED, COMPLETED, NO_SHOW, RESCHEDULED
-ViewingInterestLevel: HIGH, MEDIUM, LOW, NOT_INTERESTED
-AppointmentParticipantRole: CUSTOMER, AGENT, OWNER, OTHER
-ParticipantResponseStatus: INVITED, ACCEPTED, DECLINED, TENTATIVE
-
-ContractType: SALE, LEASE
-ContractStatus: DRAFT, PENDING_REVIEW, PENDING_SIGNATURE, SIGNED, ACTIVE,
-  EXPIRED, CANCELLED, TERMINATED
-ContractDocumentType: DRAFT, FINAL, SIGNED, ATTACHMENT
-ContractPartyRole: BUYER, SELLER, TENANT, LANDLORD, AGENT, WITNESS, OTHER
-
-TransactionStatus: PENDING, DEPOSITED, CONTRACT_SIGNED, PAYMENT_IN_PROGRESS,
-  COMPLETED, CANCELLED, REFUNDED
-DepositStatus: PENDING, RECEIVED, VERIFIED, REFUNDED, CANCELLED
-PaymentScheduleStatus: PENDING, PARTIALLY_PAID, PAID, OVERDUE, CANCELLED
-PaymentMethod: CASH, BANK_TRANSFER, CREDIT_CARD, DEBIT_CARD, E_WALLET, OTHER
-PaymentStatus: PENDING, COMPLETED, FAILED, REFUNDED, CANCELLED
-InvoiceStatus: DRAFT, ISSUED, PARTIALLY_PAID, PAID, OVERDUE, VOID
-
-CommissionCalculationType: PERCENTAGE, FIXED
-CommissionStatus: PENDING, APPROVED, PAID, CANCELLED
-
-FileAccessLevel: PUBLIC, PRIVATE
-StorageProvider: LOCAL
-Sort.Direction: ASC, DESC
-```
-
-## 19. Đề xuất cấu trúc frontend
-
-### Public
-
-- Trang tìm kiếm listing
-- Trang chi tiết listing
-- Đăng ký, đăng nhập
-
-### Customer
-
-- Favorite listings
-- Lịch hẹn của tôi
-- Chi tiết/cancel/reschedule/feedback lịch hẹn
-- Notification center
-
-### Agent
-
-- Property list/detail/create/edit/images
-- Listing create/edit/workflow
-- Customer CRM/detail/timeline
-- Lead kanban/detail/activity/task
-- Appointment calendar
-- Contract list/detail/documents/workflow
-- Transaction detail/payment records
-- Commission của tôi
-- Agent dashboard
-- Notification center
-
-### Manager
-
-- Toàn bộ Agent UI
-- User management
-- Listing review
-- Contract approval
-- Commission và commission rules
-- Manager dashboard
-- Reports
-
-### Admin
-
-- Toàn bộ Manager UI
-- Admin dashboard
-- Audit log
-
-## 20. Khoảng trống API cần bổ sung để frontend đầy đủ
-
-Các phần sau chưa có endpoint dù dữ liệu/model đã tồn tại:
-
-1. Master data: province, district, ward, property type, amenity, lead source,
-   listing package, contract template.
-2. Danh sách và chi tiết listing nội bộ cho Agent/Manager/Admin.
-3. Download/stream file private.
-4. Quản lý trạng thái follow-up task.
-5. API cho owner portal.
-6. API hồ sơ cá nhân, đổi mật khẩu, quên mật khẩu, xác minh email.
-7. API đánh dấu no-show appointment hoặc phản hồi lời mời participant.
-8. API quản trị deposit/payment/invoice sau khi đã tạo như refund/cancel/void.
-9. Team/department mapping để dashboard Manager chỉ phản ánh đội nhóm của họ.
-10. API download/xuất invoice, receipt và contract thành file.
-
-Frontend nên mock hoặc trì hoãn các màn hình này cho đến khi backend bổ sung.
-
-## 21. API legacy không nên dùng
-
-Mã nguồn còn controller cũ `/api/buildings/`. Controller này:
-
-- Không theo response envelope chuẩn.
-- Không thuộc kiến trúc `/api/v1`.
-- Không có security/DTO/validation đồng nhất.
-- Không liên quan module property mới.
-
-Frontend mới không nên tích hợp `/api/buildings/`.
+## 19. Enum frontend can map
+
+- `RoleCode`: `ADMIN`, `MANAGER`, `AGENT`, `CUSTOMER`, `OWNER`
+- `UserStatus`: `PENDING_VERIFICATION`, `ACTIVE`, `INACTIVE`, `LOCKED`
+- `PropertyStatus`: `DRAFT`, `AVAILABLE`, `RESERVED`, `SOLD`, `RENTED`, `INACTIVE`, `DELETED`
+- `PropertyPurpose`: `SALE`, `RENT`
+- `PropertyDirection`: `NORTH`, `NORTHEAST`, `EAST`, `SOUTHEAST`, `SOUTH`, `SOUTHWEST`, `WEST`, `NORTHWEST`
+- `PropertyLegalStatus`: `PINK_BOOK`, `RED_BOOK`, `SALE_CONTRACT`, `WAITING_FOR_CERTIFICATE`, `OTHER`, `UNKNOWN`
+- `FurnitureStatus`: `UNFURNISHED`, `PARTIALLY_FURNISHED`, `FULLY_FURNISHED`
+- `LegalDocumentType`: `PINK_BOOK`, `RED_BOOK`, `OWNERSHIP_CERTIFICATE`, `LAND_USE_CERTIFICATE`, `CONSTRUCTION_PERMIT`, `SALE_CONTRACT`, `OTHER`
+- `DocumentVerificationStatus`: `UNVERIFIED`, `PENDING`, `VERIFIED`, `REJECTED`, `EXPIRED`
+- `AmenityCategory`: `ACCESS`, `SECURITY`, `LEISURE`, `FEATURE`
+- `ListingPurpose`: `SALE`, `RENT`
+- `ListingStatus`: `DRAFT`, `PENDING_REVIEW`, `APPROVED`, `REJECTED`, `PUBLISHED`, `UNPUBLISHED`, `EXPIRED`, `SOLD`, `RENTED`
+- `ListingVisibility`: `PUBLIC`, `INTERNAL`, `PRIVATE`
+- `CustomerStatus`: `ACTIVE`, `INACTIVE`, `ARCHIVED`
+- `CustomerSource`: `MANUAL`, `WEBSITE`, `REFERRAL`, `IMPORT`, `OTHER`
+- `CustomerPriority`: `LOW`, `MEDIUM`, `HIGH`
+- `LeadPriority`: `LOW`, `MEDIUM`, `HIGH`
+- `LeadPipelineStatus`: `NEW`, `ASSIGNED`, `CONTACTED`, `INTERESTED`, `VIEWING_SCHEDULED`, `NEGOTIATING`, `CLOSED_WON`, `CLOSED_LOST`, `INVALID`
+- `LeadActivityType`: `CALL`, `EMAIL`, `CHAT`, `MEETING`, `STATUS_CHANGE`, `ASSIGNMENT`, `OTHER`
+- `FollowUpTaskStatus`: `PENDING`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`
+- `AppointmentStatus`: `PENDING`, `CONFIRMED`, `CANCELLED`, `COMPLETED`, `NO_SHOW`, `RESCHEDULED`
+- `AppointmentParticipantRole`: `CUSTOMER`, `AGENT`, `OWNER`, `OTHER`
+- `ParticipantResponseStatus`: `INVITED`, `ACCEPTED`, `DECLINED`, `TENTATIVE`
+- `ViewingInterestLevel`: `HIGH`, `MEDIUM`, `LOW`, `NOT_INTERESTED`
+- `ContractType`: `SALE`, `LEASE`
+- `ContractStatus`: `DRAFT`, `PENDING_REVIEW`, `PENDING_SIGNATURE`, `SIGNED`, `ACTIVE`, `EXPIRED`, `CANCELLED`, `TERMINATED`
+- `ContractDocumentType`: `DRAFT`, `FINAL`, `SIGNED`, `ATTACHMENT`
+- `ContractPartyRole`: `BUYER`, `SELLER`, `TENANT`, `LANDLORD`, `AGENT`, `WITNESS`, `OTHER`
+- `ContractSignatureStatus`: `PENDING`, `SIGNED`, `DECLINED`, `VOIDED`
+- `ContractSignatureMethod`: `ELECTRONIC`, `UPLOADED`, `WET_INK`
+- `TransactionStatus`: `PENDING`, `DEPOSITED`, `CONTRACT_SIGNED`, `PAYMENT_IN_PROGRESS`, `COMPLETED`, `CANCELLED`, `REFUNDED`
+- `DepositStatus`: `PENDING`, `RECEIVED`, `VERIFIED`, `REFUNDED`, `CANCELLED`
+- `PaymentScheduleStatus`: `PENDING`, `PARTIALLY_PAID`, `PAID`, `OVERDUE`, `CANCELLED`
+- `PaymentStatus`: `PENDING`, `COMPLETED`, `FAILED`, `REFUNDED`, `CANCELLED`
+- `PaymentMethod`: `CASH`, `BANK_TRANSFER`, `CREDIT_CARD`, `DEBIT_CARD`, `E_WALLET`, `OTHER`
+- `InvoiceStatus`: `DRAFT`, `ISSUED`, `PARTIALLY_PAID`, `PAID`, `OVERDUE`, `VOID`
+- `CommissionStatus`: `PENDING`, `APPROVED`, `PAID`, `CANCELLED`
+- `CommissionCalculationType`: `PERCENTAGE`, `FIXED`
+- `NotificationChannel`: `IN_APP`, `EMAIL`
+- `FileAccessLevel`: `PUBLIC`, `PRIVATE`
+- `AiConversationStatus`: `OPEN`, `CLOSED`
+- `AiMessageRole`: `USER`, `ASSISTANT`, `SYSTEM`
+- `AiRequestStatus`: `SUCCESS`, `FAILED`, `SKIPPED`, `TIMEOUT`
+
+## 20. Frontend implementation checklist
+
+### API client
+
+- Tao `apiClient` dung base URL va unwrap `ApiResponse.data`.
+- Interceptor them bearer token.
+- Queue refresh token de tranh nhieu request refresh cung luc.
+- Chuan hoa error shape thanh `{ code, message, fieldErrors }`.
+- Ham build query bo qua `null`, `undefined`, chuoi rong.
+- Upload helper dung `FormData`, khong set tay boundary.
+
+### State/cache
+
+- Cache public listing search theo query.
+- Cache `/auth/me`, unread notification count, enum labels.
+- Invalidate property sau upload/xoa/set cover image.
+- Invalidate customer/lead detail sau note/activity/task.
+- Invalidate dashboard/report khi date range doi.
+
+### UX theo workflow backend
+
+- Property: tao draft, upload image, set cover, doi status `AVAILABLE`.
+- Listing: tao draft, submit, manager approve/reject, publish.
+- CRM: tao customer, them requirement, lien ket lead/listing.
+- Lead: assign, update pipeline, tao appointment/follow-up.
+- Appointment: confirm, reschedule, complete, feedback.
+- Contract: create, upload document, submit review, approve, mark signed.
+- Transaction: create tu contract, deposit, schedule, payment, invoice, receipt,
+  update status `COMPLETED`.
+- Commission: agent xem `/my`, manager/admin danh dau paid.
+- Notification: badge unread, mark read/read all.
+- AI: dung nhu assistant phu, luu response vao form nhung cho user sua truoc
+  khi submit chinh.
+
+## 21. Khoang trong backend frontend can biet
+
+- Da xoa legacy `/api/buildings/**`; frontend khong tich hop API nay.
+- Chua co master-data API public cho province/district/ward/property type/amenity/listing package/lead source. Neu UI can dropdown dong, can bo sung endpoint hoac seed/cau hinh frontend tam thoi.
+- Chua co API listing list/detail noi bo cho draft/pending. Moderation UI day du can backend bo sung.
+- Chua co owner portal rieng, du role `OWNER` da ton tai.
+- Chua co profile update/change password/forgot password/email verification UI flow du endpoint rieng.
+- Chua co file download/delete chung cho `/api/v1/files`; chi co upload chung va upload theo property/contract.
+- Chua co WebSocket notification; dung polling.
+- AI co fallback/noop nen response co the la du lieu du phong khi chua cau hinh provider that.
+
+## 22. Demo flow end-to-end nen dung de test frontend
+
+1. Login admin.
+2. Register agent, admin gan role/status neu can.
+3. Agent tao property, upload image, set cover, doi status `AVAILABLE`.
+4. Agent tao listing, submit review.
+5. Manager/Admin approve listing.
+6. Agent publish listing.
+7. Guest search `/api/v1/search/listings`, xem detail theo slug.
+8. Customer login, favorite listing.
+9. Agent tao customer/lead tu nhu cau.
+10. Agent tao appointment, confirm, complete, them feedback.
+11. Agent tao contract, upload document, submit review.
+12. Manager/Admin approve contract.
+13. Agent mark signed, tao transaction.
+14. Ghi deposit, schedule, payment, invoice, receipt.
+15. Cap nhat transaction `COMPLETED`, xem commission/report/dashboard.

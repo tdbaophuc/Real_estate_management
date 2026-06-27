@@ -30,10 +30,13 @@ import java.util.Comparator;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -71,6 +74,8 @@ class FileUploadIntegrationTest {
 
     private User agent;
     private String agentToken;
+    private String managerToken;
+    private String otherAgentToken;
     private String customerToken;
 
     @BeforeEach
@@ -80,8 +85,12 @@ class FileUploadIntegrationTest {
         clearStorage();
 
         agent = createUser("agent-upload@example.test", RoleCode.AGENT);
+        User manager = createUser("manager-upload@example.test", RoleCode.MANAGER);
+        User otherAgent = createUser("other-agent-upload@example.test", RoleCode.AGENT);
         User customer = createUser("customer-upload@example.test", RoleCode.CUSTOMER);
         agentToken = login(agent.getEmail());
+        managerToken = login(manager.getEmail());
+        otherAgentToken = login(otherAgent.getEmail());
         customerToken = login(customer.getEmail());
     }
 
@@ -147,6 +156,116 @@ class FileUploadIntegrationTest {
     }
 
     @Test
+    void ownerShouldReadMetadataAndDownloadPrivateFile() throws Exception {
+        MvcResult upload = uploadPdf("contract.pdf", agentToken);
+        JsonNode data = objectMapper.readTree(upload.getResponse().getContentAsString()).path("data");
+        Long fileId = data.path("id").longValue();
+
+        mockMvc.perform(get("/api/v1/files/{fileId}", fileId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(fileId))
+                .andExpect(jsonPath("$.data.originalFileName").value("contract.pdf"))
+                .andExpect(jsonPath("$.data.storageProvider").value("LOCAL"))
+                .andExpect(jsonPath("$.data.storageKey").value(data.path("storageKey").asText()))
+                .andExpect(jsonPath("$.data.accessLevel").value("PRIVATE"))
+                .andExpect(jsonPath("$.data.publicUrl").doesNotExist());
+
+        mockMvc.perform(get("/api/v1/files/{fileId}/download", fileId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isOk())
+                .andExpect(header().string(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"contract.pdf\""
+                ))
+                .andExpect(content().bytes("%PDF-1.7 test".getBytes()));
+    }
+
+    @Test
+    void publicDownloadShouldRedirectToSafeDirectUrl() throws Exception {
+        MvcResult upload = mockMvc.perform(multipart("/api/v1/files/upload")
+                        .file(png("listing.png", PNG_BYTES))
+                        .param("accessLevel", "PUBLIC")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        JsonNode data = objectMapper.readTree(upload.getResponse().getContentAsString()).path("data");
+
+        mockMvc.perform(get("/api/v1/files/{fileId}/download", data.path("id").longValue())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isFound())
+                .andExpect(header().string(HttpHeaders.LOCATION, data.path("publicUrl").asText()));
+    }
+
+    @Test
+    void fileApisShouldReturnForbiddenAndNotFound() throws Exception {
+        MvcResult upload = uploadPdf("contract.pdf", agentToken);
+        Long fileId = objectMapper.readTree(upload.getResponse().getContentAsString())
+                .at("/data/id")
+                .longValue();
+
+        mockMvc.perform(get("/api/v1/files/{fileId}", fileId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(otherAgentToken)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        mockMvc.perform(get("/api/v1/files/{fileId}", 999999)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    void ownerShouldDeleteUnlinkedFileAndStoredObject() throws Exception {
+        MvcResult upload = uploadPdf("contract.pdf", agentToken);
+        JsonNode data = objectMapper.readTree(upload.getResponse().getContentAsString()).path("data");
+        Long fileId = data.path("id").longValue();
+        Path storedPath = STORAGE_ROOT.resolve(data.path("storageKey").asText());
+        assertThat(Files.exists(storedPath)).isTrue();
+
+        mockMvc.perform(delete("/api/v1/files/{fileId}", fileId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isNoContent());
+
+        assertThat(fileResourceRepository.findById(fileId)).isEmpty();
+        assertThat(Files.exists(storedPath)).isFalse();
+    }
+
+    @Test
+    void managerShouldChangeAccessLevelAndAgentShouldNot() throws Exception {
+        MvcResult upload = uploadPdf("contract.pdf", agentToken);
+        JsonNode data = objectMapper.readTree(upload.getResponse().getContentAsString()).path("data");
+        Long fileId = data.path("id").longValue();
+        Path privatePath = STORAGE_ROOT.resolve(data.path("storageKey").asText());
+
+        mockMvc.perform(patch("/api/v1/files/{fileId}/access-level", fileId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("accessLevel", "PUBLIC")))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        MvcResult changed = mockMvc.perform(patch("/api/v1/files/{fileId}/access-level", fileId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("accessLevel", "PUBLIC")))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(managerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.accessLevel").value("PUBLIC"))
+                .andExpect(jsonPath("$.data.publicUrl").isNotEmpty())
+                .andExpect(jsonPath("$.data.storageKey").value(org.hamcrest.Matchers.startsWith("public/")))
+                .andReturn();
+
+        JsonNode changedData = objectMapper.readTree(changed.getResponse().getContentAsString()).path("data");
+        assertThat(Files.exists(privatePath)).isFalse();
+        assertThat(Files.exists(STORAGE_ROOT.resolve(changedData.path("storageKey").asText()))).isTrue();
+
+        mockMvc.perform(get("/api/v1/files/{fileId}/download", fileId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isFound())
+                .andExpect(header().string(HttpHeaders.LOCATION, changedData.path("publicUrl").asText()));
+    }
+
+    @Test
     void uploadShouldRequireAuthorizedInternalRole() throws Exception {
         MockMultipartFile image = png("listing.png", PNG_BYTES);
 
@@ -196,6 +315,21 @@ class FileUploadIntegrationTest {
 
     private MockMultipartFile png(String name, byte[] content) {
         return new MockMultipartFile("file", name, MediaType.IMAGE_PNG_VALUE, content);
+    }
+
+    private MvcResult uploadPdf(String name, String token) throws Exception {
+        MockMultipartFile document = new MockMultipartFile(
+                "file",
+                name,
+                MediaType.APPLICATION_PDF_VALUE,
+                "%PDF-1.7 test".getBytes()
+        );
+        return mockMvc.perform(multipart("/api/v1/files/upload")
+                        .file(document)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.accessLevel").value("PRIVATE"))
+                .andReturn();
     }
 
     private User createUser(String email, RoleCode roleCode) {

@@ -17,6 +17,8 @@ public interface PropertyImageRepository extends JpaRepository<PropertyImage, Lo
 
     Optional<PropertyImage> findByStorageKey(String storageKey);
 
+    boolean existsByFileResourceId(Long fileResourceId);
+
     @EntityGraph(attributePaths = {"uploadedBy", "fileResource"})
     Optional<PropertyImage> findByIdAndPropertyId(Long id, Long propertyId);
 

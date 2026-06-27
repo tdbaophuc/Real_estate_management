@@ -21,4 +21,11 @@ public interface PropertyLegalDocumentRepository extends JpaRepository<PropertyL
     );
 
     Optional<PropertyLegalDocument> findByStorageKey(String storageKey);
+
+    boolean existsByStorageKey(String storageKey);
+
+    boolean existsByStorageKeyAndVerificationStatus(
+            String storageKey,
+            DocumentVerificationStatus verificationStatus
+    );
 }

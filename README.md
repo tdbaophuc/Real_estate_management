@@ -48,8 +48,8 @@ Current backend modules include:
   property recommendation, lead scoring, chatbot sessions, customer summaries,
   and property image analysis skeletons with fallback behavior.
 
-Legacy `/api/buildings/**` code still exists from the original course project.
-New clients should use `/api/v1/**` APIs.
+Legacy `/api/buildings/**` source from the original course project has been
+removed. New clients should use `/api/v1/**` APIs only.
 
 ## Tech Stack
 

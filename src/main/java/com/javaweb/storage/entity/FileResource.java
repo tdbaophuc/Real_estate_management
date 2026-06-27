@@ -124,6 +124,18 @@ public class FileResource {
         return publicUrl;
     }
 
+    public void updateStorage(
+            String storageKey,
+            String checksumSha256,
+            FileAccessLevel accessLevel,
+            String publicUrl
+    ) {
+        this.storageKey = storageKey;
+        this.checksumSha256 = checksumSha256;
+        this.accessLevel = accessLevel;
+        this.publicUrl = publicUrl;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }

@@ -2,15 +2,16 @@ package com.javaweb.storage.service;
 
 import com.javaweb.storage.config.StorageProperties;
 import com.javaweb.storage.enums.FileAccessLevel;
+import com.javaweb.storage.enums.StorageProvider;
 import com.javaweb.storage.exception.FileUploadException;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
-import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -22,7 +23,6 @@ import java.util.HexFormat;
 import java.util.Locale;
 import java.util.UUID;
 
-@Service
 public class LocalFileStorageService implements FileStorageService {
     private final Path root;
 
@@ -34,6 +34,11 @@ public class LocalFileStorageService implements FileStorageService {
         } catch (IOException exception) {
             throw new FileUploadException("Local storage could not be initialized", exception);
         }
+    }
+
+    @Override
+    public StorageProvider provider() {
+        return StorageProvider.LOCAL;
     }
 
     @Override
@@ -84,6 +89,32 @@ public class LocalFileStorageService implements FileStorageService {
     }
 
     @Override
+    public String createDownloadUrl(String storageKey) {
+        return null;
+    }
+
+    @Override
+    public StoredFile changeAccessLevel(String storageKey, FileAccessLevel accessLevel) {
+        String currentPrefix = storageKey.startsWith("public/")
+                ? "public"
+                : "private";
+        String targetPrefix = accessLevel.name().toLowerCase(Locale.ROOT);
+        String targetKey = targetPrefix + storageKey.substring(currentPrefix.length());
+        if (targetKey.equals(storageKey)) {
+            return new StoredFile(storageKey, checksum(resolveKey(storageKey)), publicUrl(targetKey, accessLevel));
+        }
+        Path source = resolveKey(storageKey);
+        Path target = resolveKey(targetKey);
+        try {
+            Files.createDirectories(target.getParent());
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+            return new StoredFile(targetKey, checksum(target), publicUrl(targetKey, accessLevel));
+        } catch (IOException exception) {
+            throw new FileUploadException("Stored file access level could not be changed", exception);
+        }
+    }
+
+    @Override
     public void delete(String storageKey) {
         deleteIfPresent(resolveKey(storageKey));
     }
@@ -101,6 +132,25 @@ public class LocalFileStorageService implements FileStorageService {
             Files.deleteIfExists(path);
         } catch (IOException exception) {
             throw new FileUploadException("Stored file could not be deleted", exception);
+        }
+    }
+
+    private String publicUrl(String storageKey, FileAccessLevel accessLevel) {
+        return accessLevel == FileAccessLevel.PUBLIC
+                ? "/uploads/" + storageKey.substring("public/".length())
+                : null;
+    }
+
+    private String checksum(Path path) {
+        try (InputStream input = Files.newInputStream(path);
+             DigestInputStream digested = new DigestInputStream(
+                     input,
+                     MessageDigest.getInstance("SHA-256")
+             )) {
+            digested.transferTo(OutputStream.nullOutputStream());
+            return HexFormat.of().formatHex(digested.getMessageDigest().digest());
+        } catch (IOException | NoSuchAlgorithmException exception) {
+            throw new FileUploadException("Stored file checksum could not be calculated", exception);
         }
     }
 }

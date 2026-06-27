@@ -12,7 +12,7 @@ app:
   security:
     cors:
       allowed-origins:
-        - ${FRONTEND_ORIGIN:http://localhost:3000}
+        - ${FRONTEND_ORIGIN:http://localhost:5173}
     jwt:
       secret: ${JWT_SECRET:ZGV2LW9ubHktand0LXNlY3JldC1tdXN0LWJlLWF0LWxlYXN0LTMyLWJ5dGVz}
   seed:
@@ -23,3 +23,5 @@ app:
       full-name: ${DEV_ADMIN_FULL_NAME:Development Administrator}
   reminders:
     enabled: ${REMINDERS_ENABLED:true}
+  storage:
+    provider: ${STORAGE_PROVIDER:local}

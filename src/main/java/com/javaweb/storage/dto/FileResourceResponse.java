@@ -9,6 +9,7 @@ import java.time.Instant;
 public record FileResourceResponse(
         Long id,
         String originalFileName,
+        String storageKey,
         String contentType,
         long fileSize,
         String checksumSha256,
@@ -22,6 +23,7 @@ public record FileResourceResponse(
         return new FileResourceResponse(
                 resource.getId(),
                 resource.getOriginalFileName(),
+                resource.getStorageKey(),
                 resource.getContentType(),
                 resource.getFileSize(),
                 resource.getChecksumSha256(),

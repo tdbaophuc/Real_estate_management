@@ -511,7 +511,15 @@ Base: `/api/v1/customers`, role `AGENT|MANAGER|ADMIN`.
 | PUT | `/{customerId}` | Cap nhat |
 | DELETE | `/{customerId}` | Soft delete |
 | POST | `/{customerId}/notes` | Them note |
+| PUT | `/{customerId}/notes/{noteId}` | Sua note |
+| DELETE | `/{customerId}/notes/{noteId}` | Xoa note |
+| PATCH | `/{customerId}/notes/{noteId}/pin` | Pin/unpin note |
 | POST | `/{customerId}/requirements` | Them nhu cau |
+| PUT | `/{customerId}/requirements/{requirementId}` | Sua nhu cau |
+| DELETE | `/{customerId}/requirements/{requirementId}` | Deactivate nhu cau |
+| GET | `/{customerId}/tags` | List tag |
+| POST | `/{customerId}/tags` | Them tag |
+| DELETE | `/{customerId}/tags/{tagId}` | Xoa tag |
 | GET | `/{customerId}/timeline` | Timeline CRM |
 
 `CustomerUpsertRequest`:
@@ -533,6 +541,55 @@ Base: `/api/v1/customers`, role `AGENT|MANAGER|ADMIN`.
 ```
 
 Can co it nhat mot trong `email`, `phone`, `userId`.
+
+`CustomerNoteRequest`:
+
+```json
+{
+  "content": "Khach muon goi lai cuoi tuan",
+  "pinned": true
+}
+```
+
+Pin/unpin note:
+
+```json
+{
+  "pinned": false
+}
+```
+
+`CustomerRequirementRequest` dung cho create/update:
+
+```json
+{
+  "purpose": "SALE",
+  "propertyTypeId": 1,
+  "provinceId": 1,
+  "districtId": 10,
+  "wardId": 100,
+  "minBudget": 2000000000,
+  "maxBudget": 5000000000,
+  "currency": "VND",
+  "minArea": 70,
+  "maxArea": 120,
+  "minBedrooms": 2,
+  "minBathrooms": 2,
+  "description": "Gan trung tam"
+}
+```
+
+Customer tag request:
+
+```json
+{
+  "name": "Hot buyer",
+  "color": "#D92D20"
+}
+```
+
+Visibility: `MANAGER`/`ADMIN` xem va sua customer khong bi xoa. `AGENT` chi
+thao tac customer minh tao hoac duoc assign.
 
 ## 10. Lead API
 
@@ -567,6 +624,48 @@ Base: `/api/v1/leads`, role `AGENT|MANAGER|ADMIN`.
 ```
 
 Can co it nhat mot trong `email`, `phone`, `customerId`.
+
+### 10.1 Follow-up task API
+
+Base: `/api/v1/follow-up-tasks`, role `AGENT|MANAGER|ADMIN`.
+
+| Method | Path | Ghi chu |
+| --- | --- | --- |
+| GET | `` | Search task |
+| GET | `/my` | Search task assign cho user hien tai |
+| GET | `/{taskId}` | Detail task |
+| PUT | `/{taskId}` | Sua title/description/priority/due/assignee |
+| PATCH | `/{taskId}/status` | Doi status |
+| DELETE | `/{taskId}` | Cancel task, set `status=CANCELLED` |
+
+Search filter ho tro: `status`, `priority`, `leadId`, `assignedAgentId`,
+`dueFrom`, `dueTo`, `keyword`, `page`, `size`, `sortBy`, `sortDirection`.
+`sortBy` hop le: `id`, `title`, `status`, `priority`, `dueAt`, `createdAt`,
+`updatedAt`.
+
+`FollowUpTaskUpdateRequest`:
+
+```json
+{
+  "title": "Gui danh sach listing phu hop",
+  "description": "Chon 3 can ho phu hop ngan sach",
+  "priority": "HIGH",
+  "dueAt": "2026-07-01T10:00:00Z",
+  "assignedAgentId": 7
+}
+```
+
+Status request:
+
+```json
+{
+  "status": "COMPLETED",
+  "completedAt": "2026-06-26T10:00:00Z"
+}
+```
+
+Visibility: `MANAGER`/`ADMIN` xem tat ca task cua lead chua xoa. `AGENT` xem
+task duoc assign, task minh tao, hoac task thuoc lead minh tao/duoc assign.
 
 ## 11. Appointment API
 

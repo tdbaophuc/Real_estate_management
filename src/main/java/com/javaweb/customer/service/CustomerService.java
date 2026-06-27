@@ -1,5 +1,7 @@
 package com.javaweb.customer.service;
 
+import com.javaweb.audit.AuditActions;
+import com.javaweb.audit.service.AuditLogService;
 import com.javaweb.auth.entity.Role;
 import com.javaweb.auth.entity.User;
 import com.javaweb.auth.enums.RoleCode;
@@ -11,23 +13,28 @@ import com.javaweb.common.exception.DuplicateResourceException;
 import com.javaweb.common.exception.ResourceNotFoundException;
 import com.javaweb.common.response.PageResponse;
 import com.javaweb.customer.dto.CustomerDetailResponse;
+import com.javaweb.customer.dto.CustomerNotePinRequest;
 import com.javaweb.customer.dto.CustomerNoteRequest;
 import com.javaweb.customer.dto.CustomerNoteResponse;
 import com.javaweb.customer.dto.CustomerRequirementRequest;
 import com.javaweb.customer.dto.CustomerRequirementResponse;
 import com.javaweb.customer.dto.CustomerResponse;
 import com.javaweb.customer.dto.CustomerSearchRequest;
+import com.javaweb.customer.dto.CustomerTagRequest;
+import com.javaweb.customer.dto.CustomerTagResponse;
 import com.javaweb.customer.dto.CustomerTimelineItemResponse;
 import com.javaweb.customer.dto.CustomerUpsertRequest;
 import com.javaweb.customer.entity.Customer;
 import com.javaweb.customer.entity.CustomerNote;
 import com.javaweb.customer.entity.CustomerRequirement;
+import com.javaweb.customer.entity.CustomerTag;
 import com.javaweb.customer.enums.CustomerStatus;
 import com.javaweb.customer.mapper.CustomerMapper;
 import com.javaweb.customer.repository.CustomerNoteRepository;
 import com.javaweb.customer.repository.CustomerRepository;
 import com.javaweb.customer.repository.CustomerRequirementRepository;
 import com.javaweb.customer.repository.CustomerSpecifications;
+import com.javaweb.customer.repository.CustomerTagRepository;
 import com.javaweb.property.entity.District;
 import com.javaweb.property.entity.PropertyType;
 import com.javaweb.property.entity.Province;
@@ -62,33 +69,39 @@ public class CustomerService {
     private final CustomerRepository customerRepository;
     private final CustomerNoteRepository noteRepository;
     private final CustomerRequirementRepository requirementRepository;
+    private final CustomerTagRepository tagRepository;
     private final UserRepository userRepository;
     private final PropertyTypeRepository propertyTypeRepository;
     private final ProvinceRepository provinceRepository;
     private final DistrictRepository districtRepository;
     private final WardRepository wardRepository;
     private final CustomerMapper customerMapper;
+    private final AuditLogService auditLogService;
 
     public CustomerService(
             CustomerRepository customerRepository,
             CustomerNoteRepository noteRepository,
             CustomerRequirementRepository requirementRepository,
+            CustomerTagRepository tagRepository,
             UserRepository userRepository,
             PropertyTypeRepository propertyTypeRepository,
             ProvinceRepository provinceRepository,
             DistrictRepository districtRepository,
             WardRepository wardRepository,
-            CustomerMapper customerMapper
+            CustomerMapper customerMapper,
+            AuditLogService auditLogService
     ) {
         this.customerRepository = customerRepository;
         this.noteRepository = noteRepository;
         this.requirementRepository = requirementRepository;
+        this.tagRepository = tagRepository;
         this.userRepository = userRepository;
         this.propertyTypeRepository = propertyTypeRepository;
         this.provinceRepository = provinceRepository;
         this.districtRepository = districtRepository;
         this.wardRepository = wardRepository;
         this.customerMapper = customerMapper;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -200,6 +213,71 @@ public class CustomerService {
     }
 
     @Transactional
+    public CustomerNoteResponse updateNote(
+            Long customerId,
+            Long noteId,
+            CustomerNoteRequest request,
+            AuthUserPrincipal actor
+    ) {
+        requireAccessibleCustomer(customerId, actor);
+        CustomerNote note = requireCustomerNote(customerId, noteId);
+        Map<String, Object> oldValue = Map.of(
+                "content", note.getContent(),
+                "pinned", note.isPinned()
+        );
+        note.setContent(request.content());
+        note.setPinned(request.pinned());
+        CustomerNote saved = noteRepository.saveAndFlush(note);
+        auditLogService.record(
+                actor,
+                AuditActions.CUSTOMER_NOTE_UPDATED,
+                AuditActions.CUSTOMER_NOTE,
+                note.getId(),
+                oldValue,
+                Map.of("content", saved.getContent(), "pinned", saved.isPinned())
+        );
+        return customerMapper.toNoteResponse(saved);
+    }
+
+    @Transactional
+    public void deleteNote(Long customerId, Long noteId, AuthUserPrincipal actor) {
+        requireAccessibleCustomer(customerId, actor);
+        CustomerNote note = requireCustomerNote(customerId, noteId);
+        auditLogService.record(
+                actor,
+                AuditActions.CUSTOMER_NOTE_DELETED,
+                AuditActions.CUSTOMER_NOTE,
+                note.getId(),
+                Map.of("content", note.getContent(), "pinned", note.isPinned()),
+                Map.of("deleted", true)
+        );
+        noteRepository.delete(note);
+    }
+
+    @Transactional
+    public CustomerNoteResponse pinNote(
+            Long customerId,
+            Long noteId,
+            CustomerNotePinRequest request,
+            AuthUserPrincipal actor
+    ) {
+        requireAccessibleCustomer(customerId, actor);
+        CustomerNote note = requireCustomerNote(customerId, noteId);
+        boolean oldPinned = note.isPinned();
+        note.setPinned(request.pinned());
+        CustomerNote saved = noteRepository.saveAndFlush(note);
+        auditLogService.record(
+                actor,
+                AuditActions.CUSTOMER_NOTE_PIN_CHANGED,
+                AuditActions.CUSTOMER_NOTE,
+                note.getId(),
+                Map.of("pinned", oldPinned),
+                Map.of("pinned", saved.isPinned())
+        );
+        return customerMapper.toNoteResponse(saved);
+    }
+
+    @Transactional
     public CustomerRequirementResponse addRequirement(
             Long customerId,
             CustomerRequirementRequest request,
@@ -235,6 +313,101 @@ public class CustomerService {
         return customerMapper.toRequirementResponse(
                 requirementRepository.saveAndFlush(requirement)
         );
+    }
+
+    @Transactional
+    public CustomerRequirementResponse updateRequirement(
+            Long customerId,
+            Long requirementId,
+            CustomerRequirementRequest request,
+            AuthUserPrincipal actor
+    ) {
+        requireAccessibleCustomer(customerId, actor);
+        CustomerRequirement requirement = requireCustomerRequirement(customerId, requirementId);
+        Map<String, Object> oldValue = requirementAuditValue(requirement);
+        applyRequirement(requirement, request);
+        CustomerRequirement saved = requirementRepository.saveAndFlush(requirement);
+        auditLogService.record(
+                actor,
+                AuditActions.CUSTOMER_REQUIREMENT_UPDATED,
+                AuditActions.CUSTOMER_REQUIREMENT,
+                requirement.getId(),
+                oldValue,
+                requirementAuditValue(saved)
+        );
+        return customerMapper.toRequirementResponse(saved);
+    }
+
+    @Transactional
+    public void deleteRequirement(
+            Long customerId,
+            Long requirementId,
+            AuthUserPrincipal actor
+    ) {
+        requireAccessibleCustomer(customerId, actor);
+        CustomerRequirement requirement = requireCustomerRequirement(customerId, requirementId);
+        Map<String, Object> oldValue = requirementAuditValue(requirement);
+        requirement.setActive(false);
+        requirementRepository.saveAndFlush(requirement);
+        auditLogService.record(
+                actor,
+                AuditActions.CUSTOMER_REQUIREMENT_DELETED,
+                AuditActions.CUSTOMER_REQUIREMENT,
+                requirement.getId(),
+                oldValue,
+                requirementAuditValue(requirement)
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<CustomerTagResponse> listTags(Long customerId, AuthUserPrincipal actor) {
+        requireAccessibleCustomer(customerId, actor);
+        return tagRepository.findAllByCustomerIdOrderByName(customerId)
+                .stream()
+                .map(customerMapper::toTagResponse)
+                .toList();
+    }
+
+    @Transactional
+    public CustomerTagResponse addTag(
+            Long customerId,
+            CustomerTagRequest request,
+            AuthUserPrincipal actor
+    ) {
+        Customer customer = requireAccessibleCustomer(customerId, actor);
+        if (tagRepository.existsByCustomerIdAndNameIgnoreCase(customerId, request.name())) {
+            throw new DuplicateResourceException("Customer tag already exists");
+        }
+        User createdBy = requireUser(actor.id(), "Authenticated user not found");
+        CustomerTag tag = new CustomerTag(request.name(), createdBy);
+        tag.setColor(request.color());
+        customer.addTag(tag);
+        CustomerTag saved = tagRepository.saveAndFlush(tag);
+        auditLogService.record(
+                actor,
+                AuditActions.CUSTOMER_TAG_CREATED,
+                AuditActions.CUSTOMER_TAG,
+                saved.getId(),
+                Map.of(),
+                tagAuditValue(saved)
+        );
+        return customerMapper.toTagResponse(saved);
+    }
+
+    @Transactional
+    public void deleteTag(Long customerId, Long tagId, AuthUserPrincipal actor) {
+        requireAccessibleCustomer(customerId, actor);
+        CustomerTag tag = tagRepository.findByIdAndCustomerId(tagId, customerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Customer tag not found"));
+        auditLogService.record(
+                actor,
+                AuditActions.CUSTOMER_TAG_DELETED,
+                AuditActions.CUSTOMER_TAG,
+                tag.getId(),
+                tagAuditValue(tag),
+                Map.of("deleted", true)
+        );
+        tagRepository.delete(tag);
     }
 
     @Transactional(readOnly = true)
@@ -326,6 +499,85 @@ public class CustomerService {
             throw new DuplicateResourceException("User is already linked to a customer");
         }
         return requireUserWithRole(userId, RoleCode.CUSTOMER, "Customer user");
+    }
+
+    private CustomerNote requireCustomerNote(Long customerId, Long noteId) {
+        return noteRepository.findByIdAndCustomerId(noteId, customerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Customer note not found"));
+    }
+
+    private CustomerRequirement requireCustomerRequirement(
+            Long customerId,
+            Long requirementId
+    ) {
+        return requirementRepository.findByIdAndCustomerId(requirementId, customerId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Customer requirement not found"
+                ));
+    }
+
+    private void applyRequirement(
+            CustomerRequirement requirement,
+            CustomerRequirementRequest request
+    ) {
+        Location location = requireLocation(
+                request.provinceId(),
+                request.districtId(),
+                request.wardId()
+        );
+        PropertyType propertyType = request.propertyTypeId() == null
+                ? null
+                : propertyTypeRepository.findByIdAndActiveTrue(request.propertyTypeId())
+                        .orElseThrow(() -> new ResourceNotFoundException(
+                                "Active property type not found"
+                        ));
+        requirement.setPurpose(request.purpose());
+        requirement.setPropertyType(propertyType);
+        requirement.setProvince(location.province());
+        requirement.setDistrict(location.district());
+        requirement.setWard(location.ward());
+        requirement.setMinBudget(request.minBudget());
+        requirement.setMaxBudget(request.maxBudget());
+        requirement.setCurrency(request.currency());
+        requirement.setMinArea(request.minArea());
+        requirement.setMaxArea(request.maxArea());
+        requirement.setMinBedrooms(request.minBedrooms());
+        requirement.setMinBathrooms(request.minBathrooms());
+        requirement.setDescription(request.description());
+        requirement.setActive(true);
+    }
+
+    private Map<String, Object> requirementAuditValue(CustomerRequirement requirement) {
+        return new java.util.LinkedHashMap<>() {{
+            put("purpose", requirement.getPurpose().name());
+            put("propertyTypeId", requirement.getPropertyType() == null
+                    ? null
+                    : requirement.getPropertyType().getId());
+            put("provinceId", requirement.getProvince() == null
+                    ? null
+                    : requirement.getProvince().getId());
+            put("districtId", requirement.getDistrict() == null
+                    ? null
+                    : requirement.getDistrict().getId());
+            put("wardId", requirement.getWard() == null ? null : requirement.getWard().getId());
+            put("minBudget", requirement.getMinBudget());
+            put("maxBudget", requirement.getMaxBudget());
+            put("currency", requirement.getCurrency());
+            put("minArea", requirement.getMinArea());
+            put("maxArea", requirement.getMaxArea());
+            put("minBedrooms", requirement.getMinBedrooms());
+            put("minBathrooms", requirement.getMinBathrooms());
+            put("description", requirement.getDescription());
+            put("active", requirement.isActive());
+        }};
+    }
+
+    private Map<String, Object> tagAuditValue(CustomerTag tag) {
+        Map<String, Object> value = new java.util.LinkedHashMap<>();
+        value.put("customerId", tag.getCustomer().getId());
+        value.put("name", tag.getName());
+        value.put("color", tag.getColor());
+        return value;
     }
 
     private User resolveAssignedAgent(

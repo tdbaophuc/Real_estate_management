@@ -4,10 +4,12 @@ import com.javaweb.auth.entity.User;
 import com.javaweb.customer.dto.CustomerNoteResponse;
 import com.javaweb.customer.dto.CustomerRequirementResponse;
 import com.javaweb.customer.dto.CustomerResponse;
+import com.javaweb.customer.dto.CustomerTagResponse;
 import com.javaweb.customer.dto.CustomerUpsertRequest;
 import com.javaweb.customer.entity.Customer;
 import com.javaweb.customer.entity.CustomerNote;
 import com.javaweb.customer.entity.CustomerRequirement;
+import com.javaweb.customer.entity.CustomerTag;
 import com.javaweb.property.entity.District;
 import com.javaweb.property.entity.PropertyType;
 import com.javaweb.property.entity.Province;
@@ -98,6 +100,19 @@ public class CustomerMapper {
                 requirement.isActive(),
                 requirement.getCreatedAt(),
                 requirement.getUpdatedAt()
+        );
+    }
+
+    public CustomerTagResponse toTagResponse(CustomerTag tag) {
+        User createdBy = tag.getCreatedBy();
+        return new CustomerTagResponse(
+                tag.getId(),
+                tag.getCustomer().getId(),
+                tag.getName(),
+                tag.getColor(),
+                createdBy.getId(),
+                createdBy.getFullName(),
+                tag.getCreatedAt()
         );
     }
 

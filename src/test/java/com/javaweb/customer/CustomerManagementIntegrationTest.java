@@ -1,6 +1,8 @@
 package com.javaweb.customer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.javaweb.audit.AuditActions;
+import com.javaweb.audit.repository.AuditLogRepository;
 import com.javaweb.auth.entity.Role;
 import com.javaweb.auth.entity.User;
 import com.javaweb.auth.enums.RoleCode;
@@ -33,6 +35,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -54,6 +57,9 @@ class CustomerManagementIntegrationTest {
 
     @Autowired
     private CustomerRepository customerRepository;
+
+    @Autowired
+    private AuditLogRepository auditLogRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -92,6 +98,7 @@ class CustomerManagementIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        auditLogRepository.deleteAll();
         customerRepository.deleteAll();
         wardRepository.deleteAll();
         districtRepository.deleteAll();
@@ -254,6 +261,135 @@ class CustomerManagementIntegrationTest {
     }
 
     @Test
+    void shouldManageCustomerNotesRequirementsTagsAndAuditChanges() throws Exception {
+        Long customerId = createCustomer(validRequest("CUS-D22-CRM"), agentToken);
+
+        String noteResponse = mockMvc.perform(post("/api/v1/customers/{id}/notes", customerId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "content", "Initial CRM note",
+                                "pinned", false
+                        ))))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        Long noteId = objectMapper.readTree(noteResponse).at("/data/id").asLong();
+
+        mockMvc.perform(put("/api/v1/customers/{customerId}/notes/{noteId}", customerId, noteId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "content", "Updated CRM note",
+                                "pinned", true
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content").value("Updated CRM note"))
+                .andExpect(jsonPath("$.data.pinned").value(true));
+
+        mockMvc.perform(patch(
+                                "/api/v1/customers/{customerId}/notes/{noteId}/pin",
+                                customerId,
+                                noteId
+                        )
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("pinned", false))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pinned").value(false));
+
+        Map<String, Object> requirement = requirementRequest();
+        String requirementResponse = mockMvc.perform(post(
+                                "/api/v1/customers/{id}/requirements",
+                                customerId
+                        )
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requirement)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        Long requirementId = objectMapper.readTree(requirementResponse).at("/data/id").asLong();
+
+        requirement.put("description", "Updated buyer requirement");
+        requirement.put("minBedrooms", 3);
+        mockMvc.perform(put(
+                                "/api/v1/customers/{customerId}/requirements/{requirementId}",
+                                customerId,
+                                requirementId
+                        )
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requirement)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.description").value("Updated buyer requirement"))
+                .andExpect(jsonPath("$.data.minBedrooms").value(3));
+
+        String tagResponse = mockMvc.perform(post("/api/v1/customers/{id}/tags", customerId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "name", "Hot buyer",
+                                "color", "#D92D20"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.name").value("Hot buyer"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        Long tagId = objectMapper.readTree(tagResponse).at("/data/id").asLong();
+
+        mockMvc.perform(get("/api/v1/customers/{id}/tags", customerId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].color").value("#D92D20"));
+
+        mockMvc.perform(delete("/api/v1/customers/{customerId}/tags/{tagId}", customerId, tagId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete(
+                                "/api/v1/customers/{customerId}/requirements/{requirementId}",
+                                customerId,
+                                requirementId
+                        )
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/api/v1/customers/{customerId}/notes/{noteId}", customerId, noteId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/customers/{id}", customerId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.notes.length()").value(0))
+                .andExpect(jsonPath("$.data.requirements.length()").value(0));
+
+        assertThat(auditLogRepository
+                .findAllByActionAndResourceTypeAndResourceIdOrderByCreatedAtDesc(
+                        AuditActions.CUSTOMER_NOTE_UPDATED,
+                        AuditActions.CUSTOMER_NOTE,
+                        noteId
+                )).hasSize(1);
+        assertThat(auditLogRepository
+                .findAllByActionAndResourceTypeAndResourceIdOrderByCreatedAtDesc(
+                        AuditActions.CUSTOMER_REQUIREMENT_DELETED,
+                        AuditActions.CUSTOMER_REQUIREMENT,
+                        requirementId
+                )).hasSize(1);
+        assertThat(auditLogRepository
+                .findAllByActionAndResourceTypeAndResourceIdOrderByCreatedAtDesc(
+                        AuditActions.CUSTOMER_TAG_CREATED,
+                        AuditActions.CUSTOMER_TAG,
+                        tagId
+                )).hasSize(1);
+    }
+
+    @Test
     void shouldValidateCustomerAndRequirementBusinessRules() throws Exception {
         Map<String, Object> linked = validRequest("CUS-D22-LINKED");
         linked.put("userId", customerUser.getId());
@@ -331,6 +467,27 @@ class CustomerManagementIntegrationTest {
         request.put("preferredContactMethod", "EMAIL");
         request.put("notes", "Day 22 customer");
         return request;
+    }
+
+    private Map<String, Object> requirementRequest() {
+        Map<String, Object> requirement = new LinkedHashMap<>();
+        requirement.put("purpose", "SALE");
+        requirement.put(
+                "propertyTypeId",
+                propertyTypeRepository.findByCode("APARTMENT").orElseThrow().getId()
+        );
+        requirement.put("provinceId", province.getId());
+        requirement.put("districtId", district.getId());
+        requirement.put("wardId", ward.getId());
+        requirement.put("minBudget", 2_000_000_000L);
+        requirement.put("maxBudget", 5_000_000_000L);
+        requirement.put("currency", "VND");
+        requirement.put("minArea", 70);
+        requirement.put("maxArea", 120);
+        requirement.put("minBedrooms", 2);
+        requirement.put("minBathrooms", 2);
+        requirement.put("description", "Near the city center");
+        return requirement;
     }
 
     private User createUser(String email, RoleCode roleCode) {

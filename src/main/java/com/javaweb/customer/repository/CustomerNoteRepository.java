@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface CustomerNoteRepository extends JpaRepository<CustomerNote, Long> {
     Page<CustomerNote> findAllByCustomerIdOrderByPinnedDescCreatedAtDesc(
@@ -14,4 +15,6 @@ public interface CustomerNoteRepository extends JpaRepository<CustomerNote, Long
     );
 
     List<CustomerNote> findAllByCustomerIdOrderByCreatedAtDesc(Long customerId);
+
+    Optional<CustomerNote> findByIdAndCustomerId(Long id, Long customerId);
 }

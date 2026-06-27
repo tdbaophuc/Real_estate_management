@@ -259,7 +259,7 @@ public class OpenApiConfig {
         if (path.startsWith("/api/v1/customers")) {
             return "Customers";
         }
-        if (path.startsWith("/api/v1/leads")) {
+        if (path.startsWith("/api/v1/leads") || path.startsWith("/api/v1/follow-up-tasks")) {
             return "Leads";
         }
         if (path.startsWith("/api/v1/appointments")) {

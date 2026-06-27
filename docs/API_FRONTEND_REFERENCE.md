@@ -154,6 +154,13 @@ Base: `/api/v1/auth`
 | POST | `/refresh-token` | Public | Lay access token moi |
 | POST | `/logout` | Public | Thu hoi refresh token |
 | GET | `/me` | Bearer | Lay user hien tai |
+| PATCH | `/me/profile` | Bearer | Cap nhat `fullName`, `phone` |
+| POST | `/me/change-password` | Bearer | Doi mat khau va revoke refresh tokens |
+| POST | `/me/avatar` | Bearer | Upload avatar multipart qua FileResource/local/R2 |
+| DELETE | `/me/avatar` | Bearer | Xoa avatar hien tai |
+| GET | `/me/sessions` | Bearer | List active refresh-token sessions |
+| DELETE | `/me/sessions/{sessionId}` | Bearer | Revoke mot session cua user hien tai |
+| DELETE | `/me/sessions` | Bearer | Revoke tat ca session cua user hien tai |
 
 Request chinh:
 
@@ -167,6 +174,58 @@ Request chinh:
 Register can `email`, `password`, `fullName`, tuy vao schema Swagger co them
 phone/role neu backend cho phep. Password can co chu hoa, chu thuong, so va ky
 tu dac biet.
+
+Profile update chi cho sua:
+
+```json
+{
+  "fullName": "Tran Ngoc Lan",
+  "phone": "+84901234567"
+}
+```
+
+Backend bo qua/khong cho self-update `email`, `roles`, `status`. `phone` phai
+unique neu khac gia tri hien tai.
+
+Change password:
+
+```json
+{
+  "currentPassword": "OldPass123!",
+  "newPassword": "NewPass123!",
+  "confirmPassword": "NewPass123!"
+}
+```
+
+Sau khi doi mat khau, backend revoke active refresh tokens cua user. Frontend
+nen dua user ve login hoac thuc hien login lai.
+
+Avatar upload:
+
+```http
+POST /api/v1/auth/me/avatar
+Content-Type: multipart/form-data
+
+file=<binary image>
+```
+
+Avatar dung chung validation upload anh va luu qua provider hien tai
+(`LOCAL` hoac `R2`). Response `/me` va cac self-service response co `avatarUrl`
+khi avatar public URL ton tai.
+
+Session item:
+
+```json
+{
+  "id": 123,
+  "createdAt": "2026-06-27T10:00:00Z",
+  "expiresAt": "2026-07-27T10:00:00Z"
+}
+```
+
+Session API chi tac dong session cua chinh user hien tai. Revoke session lam
+refresh token tuong ung khong con dung duoc; access token hien tai van het han
+theo TTL JWT.
 
 ## 5. Admin user management
 

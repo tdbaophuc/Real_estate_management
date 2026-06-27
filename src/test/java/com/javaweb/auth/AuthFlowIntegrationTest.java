@@ -9,6 +9,7 @@ import com.javaweb.auth.enums.UserStatus;
 import com.javaweb.auth.repository.RefreshTokenRepository;
 import com.javaweb.auth.repository.RoleRepository;
 import com.javaweb.auth.repository.UserRepository;
+import com.javaweb.storage.repository.FileResourceRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +18,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -25,7 +27,10 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -38,6 +43,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthFlowIntegrationTest {
     private static final String EMAIL = "jwt-user@example.test";
     private static final String PASSWORD = "StrongPassword123!";
+    private static final byte[] PNG_BYTES = {
+            (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x00
+    };
 
     @Autowired
     private MockMvc mockMvc;
@@ -57,9 +66,15 @@ class AuthFlowIntegrationTest {
     @Autowired
     private RefreshTokenRepository refreshTokenRepository;
 
+    @Autowired
+    private FileResourceRepository fileResourceRepository;
+
     @BeforeEach
     void setUpUser() {
+        refreshTokenRepository.deleteAll();
         userRepository.findByEmailIgnoreCase(EMAIL).ifPresent(userRepository::delete);
+        userRepository.findByEmailIgnoreCase("other-session@example.test").ifPresent(userRepository::delete);
+        userRepository.findByEmailIgnoreCase("duplicate-phone@example.test").ifPresent(userRepository::delete);
 
         Role manager = roleRepository.findByCode(RoleCode.MANAGER).orElseThrow();
         User user = new User(EMAIL, passwordEncoder.encode(PASSWORD), "JWT Test User");
@@ -323,6 +338,189 @@ class AuthFlowIntegrationTest {
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
+    @Test
+    void shouldUpdateCurrentProfileWithoutChangingProtectedFields() throws Exception {
+        createActiveUser("duplicate-phone@example.test", "+84909999999", RoleCode.CUSTOMER);
+        String accessToken = accessToken(login());
+
+        mockMvc.perform(patch("/api/v1/auth/me/profile")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName": " Updated Name ",
+                                  "phone": "+84901230000",
+                                  "email": "attacker@example.test",
+                                  "status": "INACTIVE",
+                                  "roles": ["ADMIN"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.email").value(EMAIL))
+                .andExpect(jsonPath("$.data.fullName").value("Updated Name"))
+                .andExpect(jsonPath("$.data.phone").value("+84901230000"))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.roles[0]").value("MANAGER"));
+
+        User updated = userRepository.findWithRolesByEmailIgnoreCase(EMAIL).orElseThrow();
+        assertThat(updated.getFullName()).isEqualTo("Updated Name");
+        assertThat(updated.getEmail()).isEqualTo(EMAIL);
+        assertThat(updated.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(updated.getRoles()).extracting(Role::getCode).containsExactly(RoleCode.MANAGER);
+
+        mockMvc.perform(patch("/api/v1/auth/me/profile")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName": "Updated Name",
+                                  "phone": "+84909999999"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DUPLICATE_RESOURCE"));
+    }
+
+    @Test
+    void shouldChangePasswordAndRevokeRefreshTokens() throws Exception {
+        String firstLogin = login();
+        String accessToken = accessToken(firstLogin);
+        String firstRefreshToken = objectMapper.readTree(firstLogin).at("/data/refreshToken").asText();
+        String secondRefreshToken = objectMapper.readTree(login()).at("/data/refreshToken").asText();
+
+        mockMvc.perform(post("/api/v1/auth/me/change-password")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "StrongPassword123!",
+                                  "newPassword": "NewStrongPassword123!",
+                                  "confirmPassword": "NewStrongPassword123!"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        refreshExpectingUnauthorized(firstRefreshToken);
+        refreshExpectingUnauthorized(secondRefreshToken);
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "email", EMAIL,
+                                "password", PASSWORD
+                        ))))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "email", EMAIL,
+                                "password", "NewStrongPassword123!"
+                        ))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldValidateChangePasswordRequest() throws Exception {
+        String accessToken = accessToken(login());
+
+        mockMvc.perform(post("/api/v1/auth/me/change-password")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "wrong",
+                                  "newPassword": "NewStrongPassword123!",
+                                  "confirmPassword": "NewStrongPassword123!"
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+        mockMvc.perform(post("/api/v1/auth/me/change-password")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "StrongPassword123!",
+                                  "newPassword": "weakpasswordonly",
+                                  "confirmPassword": "weakpasswordonly"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void shouldUploadAndDeleteAvatarThroughFileResourceStorage() throws Exception {
+        String accessToken = accessToken(login());
+        MockMultipartFile avatar = new MockMultipartFile(
+                "file",
+                "avatar.png",
+                MediaType.IMAGE_PNG_VALUE,
+                PNG_BYTES
+        );
+
+        mockMvc.perform(multipart("/api/v1/auth/me/avatar")
+                        .file(avatar)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.avatarUrl").isNotEmpty());
+
+        User withAvatar = userRepository.findWithRolesByEmailIgnoreCase(EMAIL).orElseThrow();
+        Long avatarFileId = withAvatar.getAvatarFileResource().getId();
+        assertThat(withAvatar.getAvatarFileResource().getStorageProvider().name()).isEqualTo("LOCAL");
+        assertThat(fileResourceRepository.findById(avatarFileId)).isPresent();
+
+        mockMvc.perform(delete("/api/v1/auth/me/avatar")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.avatarUrl").doesNotExist());
+
+        User withoutAvatar = userRepository.findWithRolesByEmailIgnoreCase(EMAIL).orElseThrow();
+        assertThat(withoutAvatar.getAvatarFileResource()).isNull();
+        assertThat(fileResourceRepository.findById(avatarFileId)).isEmpty();
+    }
+
+    @Test
+    void shouldListAndRevokeOnlyCurrentUserSessions() throws Exception {
+        String loginBody = login();
+        String accessToken = accessToken(loginBody);
+        String refreshToken = objectMapper.readTree(loginBody).at("/data/refreshToken").asText();
+        User current = userRepository.findByEmailIgnoreCase(EMAIL).orElseThrow();
+        Long currentSessionId = refreshTokenRepository.findAllByUserIdAndRevokedAtIsNull(current.getId())
+                .getFirst()
+                .getId();
+
+        User other = createActiveUser("other-session@example.test", "+84908888888", RoleCode.MANAGER);
+        String otherLogin = login("other-session@example.test", PASSWORD);
+        String otherAccessToken = accessToken(otherLogin);
+        String otherRefreshToken = objectMapper.readTree(otherLogin).at("/data/refreshToken").asText();
+        Long otherSessionId = refreshTokenRepository.findAllByUserIdAndRevokedAtIsNull(other.getId())
+                .getFirst()
+                .getId();
+
+        mockMvc.perform(get("/api/v1/auth/me/sessions")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(currentSessionId));
+
+        mockMvc.perform(delete("/api/v1/auth/me/sessions/{sessionId}", otherSessionId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        mockMvc.perform(delete("/api/v1/auth/me/sessions/{sessionId}", currentSessionId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken)))
+                .andExpect(status().isNoContent());
+        refreshExpectingUnauthorized(refreshToken);
+
+        mockMvc.perform(delete("/api/v1/auth/me/sessions")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(otherAccessToken)))
+                .andExpect(status().isNoContent());
+        refreshExpectingUnauthorized(otherRefreshToken);
+    }
+
     private void registerCustomer(String email, String phone) throws Exception {
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -336,16 +534,38 @@ class AuthFlowIntegrationTest {
     }
 
     private String login() throws Exception {
+        return login(EMAIL, PASSWORD);
+    }
+
+    private String login(String email, String password) throws Exception {
         return mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(java.util.Map.of(
-                                "email", EMAIL,
-                                "password", PASSWORD
+                                "email", email,
+                                "password", password
                         ))))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
+    }
+
+    private User createActiveUser(String email, String phone, RoleCode roleCode) {
+        Role role = roleRepository.findByCode(roleCode).orElseThrow();
+        User user = new User(email, passwordEncoder.encode(PASSWORD), "Other User");
+        user.setPhone(phone);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(true);
+        user.addRole(role);
+        return userRepository.saveAndFlush(user);
+    }
+
+    private String accessToken(String loginBody) throws Exception {
+        return objectMapper.readTree(loginBody).at("/data/accessToken").asText();
+    }
+
+    private String bearer(String token) {
+        return "Bearer " + token;
     }
 
     private void refreshExpectingUnauthorized(String refreshToken) throws Exception {

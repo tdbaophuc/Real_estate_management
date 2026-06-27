@@ -17,10 +17,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByPhone(String phone);
 
-    @EntityGraph(attributePaths = {"roles", "roles.permissions"})
+    boolean existsByPhoneAndIdNot(String phone, Long id);
+
+    @EntityGraph(attributePaths = {"roles", "roles.permissions", "avatarFileResource"})
     Optional<User> findWithRolesByEmailIgnoreCase(String email);
 
-    @EntityGraph(attributePaths = {"roles", "roles.permissions"})
+    @EntityGraph(attributePaths = {"roles", "roles.permissions", "avatarFileResource"})
     Optional<User> findWithRolesById(Long id);
 
     @EntityGraph(attributePaths = "roles")

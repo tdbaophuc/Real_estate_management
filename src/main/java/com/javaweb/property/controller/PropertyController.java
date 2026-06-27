@@ -1,6 +1,11 @@
 package com.javaweb.property.controller;
 
 import com.javaweb.auth.security.AuthUserPrincipal;
+import com.javaweb.property.dto.PropertyImageReorderRequest;
+import com.javaweb.property.dto.PropertyImageUpdateRequest;
+import com.javaweb.property.dto.PropertyLegalDocumentResponse;
+import com.javaweb.property.dto.PropertyLegalDocumentUpdateRequest;
+import com.javaweb.property.dto.PropertyLegalDocumentVerifyRequest;
 import com.javaweb.common.response.ApiResponse;
 import com.javaweb.common.response.PageResponse;
 import com.javaweb.property.dto.PropertyResponse;
@@ -10,9 +15,13 @@ import com.javaweb.property.dto.PropertyUpsertRequest;
 import com.javaweb.property.dto.UpdatePropertyStatusRequest;
 import com.javaweb.property.service.PropertyService;
 import com.javaweb.property.service.PropertyImageService;
+import com.javaweb.property.service.PropertyLegalDocumentService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -32,7 +41,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.util.List;
+
+import com.javaweb.property.enums.LegalDocumentType;
 
 @Validated
 @RestController
@@ -42,13 +54,16 @@ import java.util.List;
 public class PropertyController {
     private final PropertyService propertyService;
     private final PropertyImageService propertyImageService;
+    private final PropertyLegalDocumentService propertyLegalDocumentService;
 
     public PropertyController(
             PropertyService propertyService,
-            PropertyImageService propertyImageService
+            PropertyImageService propertyImageService,
+            PropertyLegalDocumentService propertyLegalDocumentService
     ) {
         this.propertyService = propertyService;
         this.propertyImageService = propertyImageService;
+        this.propertyLegalDocumentService = propertyLegalDocumentService;
     }
 
     @GetMapping
@@ -161,6 +176,126 @@ public class PropertyController {
         return ApiResponse.success(
                 "Property cover image updated successfully",
                 propertyImageService.setCover(propertyId, imageId, actor)
+        );
+    }
+
+    @Operation(summary = "List property legal documents")
+    @GetMapping("/{propertyId}/legal-documents")
+    public ApiResponse<List<PropertyLegalDocumentResponse>> listLegalDocuments(
+            @PathVariable Long propertyId,
+            @AuthenticationPrincipal AuthUserPrincipal actor
+    ) {
+        return ApiResponse.success(propertyLegalDocumentService.list(propertyId, actor));
+    }
+
+    @Operation(summary = "Upload a property legal document")
+    @PostMapping(
+            value = "/{propertyId}/legal-documents",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<PropertyLegalDocumentResponse> uploadLegalDocument(
+            @PathVariable Long propertyId,
+            @RequestParam MultipartFile file,
+            @RequestParam @NotNull LegalDocumentType documentType,
+            @RequestParam(required = false) @Size(max = 100) String documentNumber,
+            @RequestParam(required = false) @Size(max = 200) String issuedBy,
+            @RequestParam(required = false) LocalDate issuedDate,
+            @RequestParam(required = false) LocalDate expiryDate,
+            @RequestParam(required = false) @Size(max = 1000) String notes,
+            @AuthenticationPrincipal AuthUserPrincipal actor
+    ) {
+        return ApiResponse.success(
+                "Property legal document uploaded successfully",
+                propertyLegalDocumentService.upload(
+                        propertyId,
+                        file,
+                        documentType,
+                        documentNumber,
+                        issuedBy,
+                        issuedDate,
+                        expiryDate,
+                        notes,
+                        actor
+                )
+        );
+    }
+
+    @Operation(summary = "Get a property legal document")
+    @GetMapping("/{propertyId}/legal-documents/{documentId}")
+    public ApiResponse<PropertyLegalDocumentResponse> getLegalDocument(
+            @PathVariable Long propertyId,
+            @PathVariable Long documentId,
+            @AuthenticationPrincipal AuthUserPrincipal actor
+    ) {
+        return ApiResponse.success(propertyLegalDocumentService.get(propertyId, documentId, actor));
+    }
+
+    @Operation(summary = "Update property legal document metadata")
+    @PatchMapping("/{propertyId}/legal-documents/{documentId}")
+    public ApiResponse<PropertyLegalDocumentResponse> updateLegalDocument(
+            @PathVariable Long propertyId,
+            @PathVariable Long documentId,
+            @Valid @RequestBody PropertyLegalDocumentUpdateRequest request,
+            @AuthenticationPrincipal AuthUserPrincipal actor
+    ) {
+        return ApiResponse.success(
+                "Property legal document updated successfully",
+                propertyLegalDocumentService.update(propertyId, documentId, request, actor)
+        );
+    }
+
+    @Operation(summary = "Verify or reject a property legal document")
+    @PatchMapping("/{propertyId}/legal-documents/{documentId}/verify")
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    public ApiResponse<PropertyLegalDocumentResponse> verifyLegalDocument(
+            @PathVariable Long propertyId,
+            @PathVariable Long documentId,
+            @Valid @RequestBody PropertyLegalDocumentVerifyRequest request,
+            @AuthenticationPrincipal AuthUserPrincipal actor
+    ) {
+        return ApiResponse.success(
+                "Property legal document verification updated successfully",
+                propertyLegalDocumentService.verify(propertyId, documentId, request, actor)
+        );
+    }
+
+    @Operation(summary = "Delete a property legal document")
+    @DeleteMapping("/{propertyId}/legal-documents/{documentId}")
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    public ApiResponse<Void> deleteLegalDocument(
+            @PathVariable Long propertyId,
+            @PathVariable Long documentId,
+            @AuthenticationPrincipal AuthUserPrincipal actor
+    ) {
+        propertyLegalDocumentService.delete(propertyId, documentId, actor);
+        return ApiResponse.success("Property legal document deleted successfully", null);
+    }
+
+    @Operation(summary = "Update property image metadata")
+    @PatchMapping("/{propertyId}/images/{imageId}")
+    public ApiResponse<PropertyImageResponse> updateImage(
+            @PathVariable Long propertyId,
+            @PathVariable Long imageId,
+            @Valid @RequestBody PropertyImageUpdateRequest request,
+            @AuthenticationPrincipal AuthUserPrincipal actor
+    ) {
+        return ApiResponse.success(
+                "Property image updated successfully",
+                propertyImageService.updateMetadata(propertyId, imageId, request, actor)
+        );
+    }
+
+    @Operation(summary = "Reorder property images")
+    @PutMapping("/{propertyId}/images/reorder")
+    public ApiResponse<List<PropertyImageResponse>> reorderImages(
+            @PathVariable Long propertyId,
+            @Valid @RequestBody PropertyImageReorderRequest request,
+            @AuthenticationPrincipal AuthUserPrincipal actor
+    ) {
+        return ApiResponse.success(
+                "Property images reordered successfully",
+                propertyImageService.reorder(propertyId, request, actor)
         );
     }
 }

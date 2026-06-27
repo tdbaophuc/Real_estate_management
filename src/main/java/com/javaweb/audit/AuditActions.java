@@ -14,6 +14,18 @@ public final class AuditActions {
     public static final String FILE_DELETED = "FILE_DELETED";
     public static final String FILE_ACCESS_LEVEL_CHANGED =
             "FILE_ACCESS_LEVEL_CHANGED";
+    public static final String PROPERTY_LEGAL_DOCUMENT_UPLOADED =
+            "PROPERTY_LEGAL_DOCUMENT_UPLOADED";
+    public static final String PROPERTY_LEGAL_DOCUMENT_UPDATED =
+            "PROPERTY_LEGAL_DOCUMENT_UPDATED";
+    public static final String PROPERTY_LEGAL_DOCUMENT_VERIFIED =
+            "PROPERTY_LEGAL_DOCUMENT_VERIFIED";
+    public static final String PROPERTY_LEGAL_DOCUMENT_DELETED =
+            "PROPERTY_LEGAL_DOCUMENT_DELETED";
+    public static final String PROPERTY_IMAGE_UPDATED =
+            "PROPERTY_IMAGE_UPDATED";
+    public static final String PROPERTY_IMAGES_REORDERED =
+            "PROPERTY_IMAGES_REORDERED";
     public static final String USER_PROFILE_UPDATED = "USER_PROFILE_UPDATED";
     public static final String PASSWORD_CHANGED = "PASSWORD_CHANGED";
     public static final String USER_AVATAR_UPDATED = "USER_AVATAR_UPDATED";
@@ -27,6 +39,8 @@ public final class AuditActions {
     public static final String CONTRACT = "CONTRACT";
     public static final String COMMISSION = "COMMISSION";
     public static final String FILE = "FILE";
+    public static final String PROPERTY_IMAGE = "PROPERTY_IMAGE";
+    public static final String PROPERTY_LEGAL_DOCUMENT = "PROPERTY_LEGAL_DOCUMENT";
 
     private AuditActions() {
     }

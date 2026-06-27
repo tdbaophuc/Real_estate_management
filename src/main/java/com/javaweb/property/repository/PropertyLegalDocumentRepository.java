@@ -3,12 +3,14 @@ package com.javaweb.property.repository;
 import com.javaweb.property.entity.PropertyLegalDocument;
 import com.javaweb.property.enums.DocumentVerificationStatus;
 import com.javaweb.property.enums.LegalDocumentType;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 import java.util.Optional;
 
 public interface PropertyLegalDocumentRepository extends JpaRepository<PropertyLegalDocument, Long> {
+    @EntityGraph(attributePaths = {"uploadedBy", "property", "property.createdBy", "property.assignedAgent"})
     List<PropertyLegalDocument> findAllByPropertyIdOrderByCreatedAtDesc(Long propertyId);
 
     List<PropertyLegalDocument> findAllByPropertyIdAndDocumentType(
@@ -21,6 +23,9 @@ public interface PropertyLegalDocumentRepository extends JpaRepository<PropertyL
     );
 
     Optional<PropertyLegalDocument> findByStorageKey(String storageKey);
+
+    @EntityGraph(attributePaths = {"uploadedBy", "property", "property.createdBy", "property.assignedAgent"})
+    Optional<PropertyLegalDocument> findByIdAndPropertyId(Long id, Long propertyId);
 
     boolean existsByStorageKey(String storageKey);
 

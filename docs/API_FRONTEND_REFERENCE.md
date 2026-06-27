@@ -127,7 +127,7 @@ Mapping UI de nghi:
 ### Authenticated shell
 
 - `/dashboard`: dieu huong theo role.
-- `/properties`: list/detail/create/edit/images/status.
+- `/properties`: list/detail/create/edit/images/legal-documents/status.
 - `/listings`: create/edit/workflow. Luu y backend chua co API list/detail
   noi bo cho listing; can dung response sau create/update hoac public search
   cho listing da publish.
@@ -256,6 +256,14 @@ Base: `/api/v1/properties`, role `AGENT|MANAGER|ADMIN`.
 | POST | `/{propertyId}/images` | Upload anh property |
 | DELETE | `/{propertyId}/images/{imageId}` | Xoa anh |
 | PATCH | `/{propertyId}/cover-image/{imageId}` | Dat cover |
+| PATCH | `/{propertyId}/images/{imageId}` | Sua metadata anh |
+| PUT | `/{propertyId}/images/reorder` | Sap xep nhieu anh |
+| GET | `/{propertyId}/legal-documents` | Danh sach tai lieu phap ly |
+| POST | `/{propertyId}/legal-documents` | Upload tai lieu phap ly |
+| GET | `/{propertyId}/legal-documents/{documentId}` | Chi tiet tai lieu |
+| PATCH | `/{propertyId}/legal-documents/{documentId}` | Sua metadata tai lieu |
+| PATCH | `/{propertyId}/legal-documents/{documentId}/verify` | Verify/reject tai lieu |
+| DELETE | `/{propertyId}/legal-documents/{documentId}` | Xoa tai lieu |
 
 `PropertyUpsertRequest` can toi thieu:
 
@@ -306,6 +314,63 @@ Content-Type: multipart/form-data
 file=<binary>
 altText=Mat tien
 displayOrder=0
+```
+
+Update image metadata:
+
+```json
+{
+  "altText": "Mat tien",
+  "displayOrder": 1
+}
+```
+
+Reorder images:
+
+```json
+{
+  "items": [
+    { "imageId": 10, "displayOrder": 0 },
+    { "imageId": 11, "displayOrder": 1 }
+  ]
+}
+```
+
+Upload legal document:
+
+```http
+POST /api/v1/properties/{propertyId}/legal-documents
+Content-Type: multipart/form-data
+
+file=<binary>
+documentType=PINK_BOOK
+documentNumber=CS123456
+issuedBy=Department of Natural Resources
+issuedDate=2024-01-15
+expiryDate=
+notes=Original owner copy scanned
+```
+
+Update legal document metadata:
+
+```json
+{
+  "documentType": "LAND_USE_CERTIFICATE",
+  "documentNumber": "CS123456-UPDATED",
+  "issuedBy": "Department of Land",
+  "issuedDate": "2024-02-01",
+  "expiryDate": "2034-02-01",
+  "notes": "Updated notes"
+}
+```
+
+Verify legal document:
+
+```json
+{
+  "verificationStatus": "VERIFIED",
+  "notes": "Matched owner and address"
+}
 ```
 
 ## 7. Master Data API

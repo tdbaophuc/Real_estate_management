@@ -50,6 +50,7 @@ app:
       window: ${RATE_LIMIT_WINDOW:PT1M}
       auth-requests: ${AUTH_RATE_LIMIT_REQUESTS:20}
       ai-requests: ${AI_RATE_LIMIT_REQUESTS:60}
+      public-listing-requests: ${PUBLIC_LISTING_RATE_LIMIT_REQUESTS:30}
   storage:
     provider: ${STORAGE_PROVIDER:local}
     local-root: ${LOCAL_STORAGE_ROOT:./var/storage}

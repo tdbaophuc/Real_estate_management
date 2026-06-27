@@ -15,6 +15,10 @@ public interface CustomerRepository
 
     Optional<Customer> findByUserIdAndDeletedAtIsNull(Long userId);
 
+    Optional<Customer> findFirstByEmailIgnoreCaseAndDeletedAtIsNull(String email);
+
+    Optional<Customer> findFirstByPhoneAndDeletedAtIsNull(String phone);
+
     boolean existsByCode(String code);
 
     boolean existsByCodeAndIdNot(String code, Long id);

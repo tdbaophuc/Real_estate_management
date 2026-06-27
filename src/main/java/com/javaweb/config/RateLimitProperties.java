@@ -9,7 +9,8 @@ public record RateLimitProperties(
         boolean enabled,
         Duration window,
         int authRequests,
-        int aiRequests
+        int aiRequests,
+        int publicListingRequests
 ) {
     public RateLimitProperties {
         window = window == null || window.isZero() || window.isNegative()
@@ -17,5 +18,6 @@ public record RateLimitProperties(
                 : window;
         authRequests = authRequests <= 0 ? 20 : authRequests;
         aiRequests = aiRequests <= 0 ? 60 : aiRequests;
+        publicListingRequests = publicListingRequests <= 0 ? 30 : publicListingRequests;
     }
 }

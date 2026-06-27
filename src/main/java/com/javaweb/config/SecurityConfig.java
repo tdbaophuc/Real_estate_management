@@ -84,6 +84,11 @@ public class SecurityConfig {
                                 "/api/v1/auth/logout"
                         ).permitAll()
                         .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/search/listings/*/inquiries",
+                                "/api/v1/search/listings/*/appointment-requests"
+                        ).permitAll()
+                        .requestMatchers(
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",

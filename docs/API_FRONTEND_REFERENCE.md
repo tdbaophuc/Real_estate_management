@@ -480,6 +480,8 @@ Base: `/api/v1/search/listings`, public.
 | --- | --- | --- |
 | GET | `` | Search listing da publish |
 | GET | `/{slug}` | Chi tiet public va ghi view |
+| POST | `/{listingId}/inquiries` | Public/Bearer, tao customer + lead tu form lien he |
+| POST | `/{listingId}/appointment-requests` | Public/Bearer, tao customer + lead + appointment PENDING |
 
 Header tuy chon cho detail:
 
@@ -488,6 +490,45 @@ X-Session-Id: browser-session-id
 ```
 
 Dung de ghi view cho khach chua dang nhap.
+
+Listing inquiry request:
+
+```json
+{
+  "fullName": "Nguyen Van A",
+  "email": "a@example.com",
+  "phone": "+84901234567",
+  "message": "Toi muon xem nha vao cuoi tuan",
+  "preferredContactMethod": "PHONE"
+}
+```
+
+Appointment request:
+
+```json
+{
+  "fullName": "Nguyen Van A",
+  "email": "a@example.com",
+  "phone": "+84901234567",
+  "preferredStartAt": "2026-07-02T09:00:00Z",
+  "preferredEndAt": "2026-07-02T10:00:00Z",
+  "message": "Toi muon xem nha buoi sang"
+}
+```
+
+Behavior:
+
+- Endpoint chap nhan anonymous hoac Bearer token. Neu Bearer la `CUSTOMER`,
+  customer CRM se link voi user hien tai khi co the.
+- Backend merge customer theo email truoc, sau do phone; neu chua co thi tao
+  customer source `WEBSITE`.
+- Lead tao voi source `LISTING_INQUIRY`, listing hien tai, va assign cho
+  `property.assignedAgent`; fallback sang creator cua listing neu creator la
+  agent active.
+- Appointment request tao appointment status `PENDING` va notify assigned
+  agent.
+- Cac endpoint public submission nay bi rate-limit rieng; neu qua gioi han tra
+  `429 RATE_LIMIT_EXCEEDED` va header `Retry-After`.
 
 ### 8.3 Favorite
 

@@ -55,6 +55,15 @@ public interface ListingRepository
 
     @EntityGraph(attributePaths = {
             "property",
+            "property.assignedAgent",
+            "property.assignedAgent.roles",
+            "createdBy",
+            "createdBy.roles"
+    })
+    Optional<Listing> findPublicInteractionById(Long id);
+
+    @EntityGraph(attributePaths = {
+            "property",
             "property.propertyType",
             "property.address",
             "property.address.province",

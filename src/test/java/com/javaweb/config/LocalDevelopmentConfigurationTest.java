@@ -57,6 +57,7 @@ class LocalDevelopmentConfigurationTest {
                 "DB_NAME",
                 "DB_USERNAME",
                 "DB_PASSWORD",
+                "JWT_SECRET",
                 "DB_URL",
                 "STORAGE_PROVIDER",
                 "LOCAL_STORAGE_ROOT",
@@ -69,7 +70,9 @@ class LocalDevelopmentConfigurationTest {
                 .contains("${MINIO_ROOT_PASSWORD:?");
         assertThat(devConfig)
                 .contains("password: ${DB_PASSWORD}")
+                .contains("secret: ${JWT_SECRET}")
                 .contains("provider: ${STORAGE_PROVIDER:local}")
+                .doesNotContain("secret: ${JWT_SECRET:")
                 .doesNotContain("password: ${DB_PASSWORD:123456}");
         assertThat(gitignore.lines()).contains(".env");
     }

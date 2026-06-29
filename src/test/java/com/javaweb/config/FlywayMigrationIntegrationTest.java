@@ -175,7 +175,7 @@ class FlywayMigrationIntegrationTest {
     void shouldApplyDatabaseMigrationsAndSeedMasterData() {
         assertThat(flyway.info().current()).isNotNull();
         assertThat(flyway.info().current().getDescription())
-                .isEqualTo("add performance indexes");
+                .isEqualTo("add user avatar file resource");
 
         List<String> tables = jdbcTemplate.queryForList(
                 """

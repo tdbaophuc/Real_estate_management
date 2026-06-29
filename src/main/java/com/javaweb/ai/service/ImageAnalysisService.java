@@ -2,6 +2,7 @@ package com.javaweb.ai.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.javaweb.ai.config.AiProperties;
 import com.javaweb.ai.dto.ImageAnalysisItemResponse;
 import com.javaweb.ai.dto.ImageAnalysisRequest;
 import com.javaweb.ai.dto.ImageAnalysisResponse;
@@ -32,19 +33,22 @@ public class ImageAnalysisService {
     private final List<AiImageAnalysisProvider> providers;
     private final AiImageAnalysisRepository analysisRepository;
     private final ObjectMapper objectMapper;
+    private final AiProperties aiProperties;
 
     public ImageAnalysisService(
             PropertyImageRepository propertyImageRepository,
             UserRepository userRepository,
             List<AiImageAnalysisProvider> providers,
             AiImageAnalysisRepository analysisRepository,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            AiProperties aiProperties
     ) {
         this.propertyImageRepository = propertyImageRepository;
         this.userRepository = userRepository;
         this.providers = providers;
         this.analysisRepository = analysisRepository;
         this.objectMapper = objectMapper;
+        this.aiProperties = aiProperties;
     }
 
     @Transactional
@@ -71,7 +75,7 @@ public class ImageAnalysisService {
                 fallbackUsed,
                 status,
                 provider.name(),
-                provider.name(),
+                aiProperties.model(),
                 errorMessage,
                 results
         );
@@ -161,7 +165,7 @@ public class ImageAnalysisService {
                     fallbackUsed,
                     status,
                     provider.name(),
-                    provider.name(),
+                    aiProperties.model(),
                     errorMessage
             ));
         }

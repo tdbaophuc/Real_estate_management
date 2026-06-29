@@ -25,17 +25,14 @@ class ChatbotGuardrails {
     boolean needsProfessionalReferral(String content) {
         String normalized = content.toLowerCase(Locale.ROOT);
         return normalized.contains("phap ly")
-                || normalized.contains("pháp lý")
                 || normalized.contains("luat")
-                || normalized.contains("luật")
                 || normalized.contains("tax")
-                || normalized.contains("thue")
-                || normalized.contains("thuế")
+                || normalized.contains("thue thu")
+                || normalized.contains("thue thu nhap")
                 || normalized.contains("loan")
                 || normalized.contains("mortgage")
                 || normalized.contains("vay")
-                || normalized.contains("lai suat")
-                || normalized.contains("lãi suất");
+                || normalized.contains("lai suat");
     }
 
     String fallbackReply(String content, String aiErrorMessage) {

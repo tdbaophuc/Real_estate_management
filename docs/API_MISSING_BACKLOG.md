@@ -467,6 +467,11 @@ Can them status workflow hoac audit rieng:
 Trang thai hien tai: thieu `GET /api/v1/listings` va
 `GET /api/v1/listings/{id}` cho draft/pending/moderation.
 
+Ghi chu implemented: da bo sung `GET /api/v1/listings` va
+`GET /api/v1/listings/{listingId}` cho AGENT/MANAGER/ADMIN, gom filter noi bo,
+phan quyen theo owner/assigned agent, detail status history, view count va
+favorite count.
+
 Endpoint de xuat:
 
 | Method | Path | Role | Mo ta |
@@ -533,6 +538,11 @@ Extend request:
 
 Trang thai hien tai: public search/detail co, nhung guest/customer gui yeu cau
 tu van tu listing chua co API rieng.
+
+Ghi chu implemented: da bo sung
+`POST /api/v1/search/listings/{listingId}/inquiries`, chap nhan Public/Bearer,
+merge/tao customer theo email/phone, tao lead source `LISTING_INQUIRY`, assign
+agent cua property/listing va notify agent.
 
 Endpoint de xuat:
 
@@ -631,6 +641,10 @@ Query:
 
 Trang thai hien tai: chi co add note/add requirement.
 
+Ghi chu implemented: da bo sung update/delete note, pin/unpin note, update va
+deactivate requirement cho AGENT/MANAGER/ADMIN, kem ownership/assignment rules
+va audit log.
+
 Endpoint de xuat:
 
 | Method | Path | Role | Mo ta |
@@ -644,6 +658,9 @@ Endpoint de xuat:
 ### 9.2 Customer tag management
 
 Trang thai hien tai: entity `CustomerTag` co, nhung chua co API.
+
+Ghi chu implemented: da bo sung list/add/delete tag cho customer,
+AGENT/MANAGER/ADMIN, kem ownership/assignment rules va audit log.
 
 Endpoint de xuat:
 
@@ -702,6 +719,10 @@ Endpoint de xuat:
 ### 10.1 Follow-up task CRUD
 
 Trang thai hien tai: tao task tu lead co, nhung chua list/update/complete/cancel.
+
+Ghi chu implemented: da bo sung search, my tasks, detail, update, status update
+va cancel/delete follow-up task cho AGENT/MANAGER/ADMIN, kem assignment rules
+va audit log.
 
 Endpoint de xuat:
 
@@ -1163,6 +1184,11 @@ Hien chat co session/message, nhung neu muon chatbot thuc te can action:
 ## 22. Public/customer-facing APIs can bo sung
 
 ### 22.1 Public appointment request
+
+Ghi chu implemented: da bo sung
+`POST /api/v1/search/listings/{listingId}/appointment-requests`, chap nhan
+Public/Bearer, merge/tao customer, tao lead source `LISTING_INQUIRY`, tao
+appointment `PENDING` va notify assigned agent.
 
 Endpoint de xuat:
 

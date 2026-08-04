@@ -28,9 +28,12 @@ public class AiConversation extends AuditableEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "created_by", nullable = false, updatable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by", updatable = false)
     private User createdBy;
+
+    @Column(name = "guest_session_id", length = 100, updatable = false)
+    private String guestSessionId;
 
     @Column(nullable = false, length = 150)
     private String title;
@@ -53,6 +56,11 @@ public class AiConversation extends AuditableEntity {
         this.title = title;
     }
 
+    public AiConversation(String guestSessionId, String title) {
+        this.guestSessionId = guestSessionId;
+        this.title = title;
+    }
+
     public AiMessage addMessage(AiMessage message) {
         messages.add(message);
         message.setConversation(this);
@@ -66,6 +74,10 @@ public class AiConversation extends AuditableEntity {
 
     public User getCreatedBy() {
         return createdBy;
+    }
+
+    public String getGuestSessionId() {
+        return guestSessionId;
     }
 
     public String getTitle() {

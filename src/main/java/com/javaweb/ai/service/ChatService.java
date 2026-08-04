@@ -1,7 +1,5 @@
 package com.javaweb.ai.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.javaweb.ai.dto.AiCompletionRequest;
 import com.javaweb.ai.dto.AiCompletionResponse;
 import com.javaweb.ai.dto.ChatMessageRequest;
@@ -25,9 +23,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class ChatService {
@@ -38,7 +35,7 @@ public class ChatService {
     private final UserRepository userRepository;
     private final AiService aiService;
     private final ChatbotGuardrails guardrails;
-    private final ObjectMapper objectMapper;
+    private final ChatContextBuilder contextBuilder;
 
     public ChatService(
             AiConversationRepository conversationRepository,
@@ -46,14 +43,14 @@ public class ChatService {
             UserRepository userRepository,
             AiService aiService,
             ChatbotGuardrails guardrails,
-            ObjectMapper objectMapper
+            ChatContextBuilder contextBuilder
     ) {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
         this.aiService = aiService;
         this.guardrails = guardrails;
-        this.objectMapper = objectMapper;
+        this.contextBuilder = contextBuilder;
     }
 
     @Transactional
@@ -67,7 +64,28 @@ public class ChatService {
                 creator,
                 request.title() == null ? "AI chat session" : request.title()
         );
-        return toSessionResponse(conversationRepository.saveAndFlush(conversation), List.of());
+        return toSessionResponse(
+                conversationRepository.saveAndFlush(conversation),
+                List.of(),
+                List.of()
+        );
+    }
+
+    @Transactional
+    public ChatSessionResponse createGuestSession(
+            ChatSessionCreateRequest request,
+            String guestSessionId
+    ) {
+        String resolvedGuestSessionId = normalizeGuestSessionId(guestSessionId);
+        AiConversation conversation = new AiConversation(
+                resolvedGuestSessionId,
+                request.title() == null ? "Guest AI chat session" : request.title()
+        );
+        return toSessionResponse(
+                conversationRepository.saveAndFlush(conversation),
+                List.of(),
+                List.of()
+        );
     }
 
     @Transactional
@@ -86,17 +104,36 @@ public class ChatService {
         messageRepository.saveAndFlush(userMessage);
 
         List<AiMessage> history = messageRepository.findAllByConversationIdOrderByCreatedAtAsc(sessionId);
+        ChatContextBuilder.ChatContext context = contextBuilder.build(request.content(), history, actor);
+        if (guardrails.needsProfessionalReferral(request.content())) {
+            AiMessage assistantMessage = new AiMessage(AiMessageRole.ASSISTANT, limit(context.fallbackReply(), 8000));
+            assistantMessage.setAiResult(
+                    AiRequestStatus.SKIPPED,
+                    "guardrails",
+                    "guardrails",
+                    null
+            );
+            conversation.addMessage(assistantMessage);
+            messageRepository.saveAndFlush(assistantMessage);
+            conversationRepository.saveAndFlush(conversation);
+            return toSessionResponse(
+                    conversation,
+                    messageRepository.findAllByConversationIdOrderByCreatedAtAsc(sessionId),
+                    List.of()
+            );
+        }
+
         AiCompletionResponse aiResponse = aiService.complete(new AiCompletionRequest(
                 OPERATION,
-                guardrails.systemPrompt(),
-                buildUserPrompt(request.content(), history),
+                context.systemPrompt(),
+                context.userPrompt(),
                 "ai_conversation",
                 conversation.getId(),
-                metadataJson(conversation, actor, history)
+                context.metadataJson()
         ));
         String reply = aiResponse.status() == AiRequestStatus.SUCCESS && hasText(aiResponse.content())
                 ? aiResponse.content().trim()
-                : guardrails.fallbackReply(request.content(), aiResponse.errorMessage());
+                : context.fallbackReply();
         AiMessage assistantMessage = new AiMessage(AiMessageRole.ASSISTANT, limit(reply, 8000));
         assistantMessage.setAiResult(
                 aiResponse.status(),
@@ -108,14 +145,93 @@ public class ChatService {
         messageRepository.saveAndFlush(assistantMessage);
         conversationRepository.saveAndFlush(conversation);
 
-        return getSession(sessionId, actor);
+        return toSessionResponse(
+                conversation,
+                messageRepository.findAllByConversationIdOrderByCreatedAtAsc(sessionId),
+                context.suggestedListings()
+        );
+    }
+
+    @Transactional
+    public ChatSessionResponse sendGuestMessage(
+            Long sessionId,
+            ChatMessageRequest request,
+            String guestSessionId
+    ) {
+        AiConversation conversation = requireAccessibleGuestConversation(sessionId, guestSessionId);
+        if (conversation.getStatus() != AiConversationStatus.OPEN) {
+            throw new BusinessException("Chat session is closed");
+        }
+
+        AiMessage userMessage = new AiMessage(AiMessageRole.USER, request.content());
+        conversation.addMessage(userMessage);
+        messageRepository.saveAndFlush(userMessage);
+
+        List<AiMessage> history = messageRepository.findAllByConversationIdOrderByCreatedAtAsc(sessionId);
+        ChatContextBuilder.ChatContext context = contextBuilder.buildGuest(
+                request.content(),
+                history,
+                conversation.getGuestSessionId()
+        );
+        if (guardrails.needsProfessionalReferral(request.content())) {
+            AiMessage assistantMessage = new AiMessage(AiMessageRole.ASSISTANT, limit(context.fallbackReply(), 8000));
+            assistantMessage.setAiResult(
+                    AiRequestStatus.SKIPPED,
+                    "guardrails",
+                    "guardrails",
+                    null
+            );
+            conversation.addMessage(assistantMessage);
+            messageRepository.saveAndFlush(assistantMessage);
+            conversationRepository.saveAndFlush(conversation);
+            return toSessionResponse(
+                    conversation,
+                    messageRepository.findAllByConversationIdOrderByCreatedAtAsc(sessionId),
+                    List.of()
+            );
+        }
+
+        AiCompletionResponse aiResponse = aiService.complete(new AiCompletionRequest(
+                OPERATION,
+                context.systemPrompt(),
+                context.userPrompt(),
+                "ai_conversation",
+                conversation.getId(),
+                context.metadataJson()
+        ));
+        String reply = aiResponse.status() == AiRequestStatus.SUCCESS && hasText(aiResponse.content())
+                ? aiResponse.content().trim()
+                : context.fallbackReply();
+        AiMessage assistantMessage = new AiMessage(AiMessageRole.ASSISTANT, limit(reply, 8000));
+        assistantMessage.setAiResult(
+                aiResponse.status(),
+                aiResponse.provider(),
+                aiResponse.model(),
+                limit(aiResponse.errorMessage(), 1000)
+        );
+        conversation.addMessage(assistantMessage);
+        messageRepository.saveAndFlush(assistantMessage);
+        conversationRepository.saveAndFlush(conversation);
+
+        return toSessionResponse(
+                conversation,
+                messageRepository.findAllByConversationIdOrderByCreatedAtAsc(sessionId),
+                context.suggestedListings()
+        );
     }
 
     @Transactional(readOnly = true)
     public ChatSessionResponse getSession(Long sessionId, AuthUserPrincipal actor) {
         AiConversation conversation = requireAccessibleConversation(sessionId, actor);
         List<AiMessage> messages = messageRepository.findAllByConversationIdOrderByCreatedAtAsc(sessionId);
-        return toSessionResponse(conversation, messages);
+        return toSessionResponse(conversation, messages, List.of());
+    }
+
+    @Transactional(readOnly = true)
+    public ChatSessionResponse getGuestSession(Long sessionId, String guestSessionId) {
+        AiConversation conversation = requireAccessibleGuestConversation(sessionId, guestSessionId);
+        List<AiMessage> messages = messageRepository.findAllByConversationIdOrderByCreatedAtAsc(sessionId);
+        return toSessionResponse(conversation, messages, List.of());
     }
 
     private AiConversation requireAccessibleConversation(
@@ -124,6 +240,9 @@ public class ChatService {
     ) {
         AiConversation conversation = conversationRepository.findWithMessagesById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Chat session not found"));
+        if (conversation.getCreatedBy() == null) {
+            throw new AccessDeniedException("Guest chat sessions require guest access");
+        }
         if (!isManagerOrAdmin(actor)
                 && !conversation.getCreatedBy().getId().equals(actor.id())) {
             throw new AccessDeniedException("Users can only access their own chat sessions");
@@ -131,55 +250,37 @@ public class ChatService {
         return conversation;
     }
 
-    private String buildUserPrompt(String currentMessage, List<AiMessage> history) {
-        return """
-                Conversation history:
-                %s
-
-                Current user message:
-                %s
-                """.formatted(historyText(history), currentMessage);
-    }
-
-    private String historyText(List<AiMessage> history) {
-        return history.stream()
-                .limit(20)
-                .map(message -> message.getRole().name() + ": " + message.getContent())
-                .reduce((left, right) -> left + "\n" + right)
-                .orElse("(no previous messages)");
-    }
-
-    private String metadataJson(
-            AiConversation conversation,
-            AuthUserPrincipal actor,
-            List<AiMessage> history
+    private AiConversation requireAccessibleGuestConversation(
+            Long sessionId,
+            String guestSessionId
     ) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("conversationId", conversation.getId());
-        payload.put("actorId", actor.id());
-        payload.put("actorRoles", actor.roles());
-        payload.put("messageCount", history.size());
-        try {
-            return objectMapper.writeValueAsString(payload);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Unable to build AI chat metadata", exception);
+        String normalizedGuestSessionId = requireGuestSessionId(guestSessionId);
+        AiConversation conversation = conversationRepository.findWithMessagesById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Chat session not found"));
+        if (conversation.getCreatedBy() != null
+                || !normalizedGuestSessionId.equals(conversation.getGuestSessionId())) {
+            throw new ResourceNotFoundException("Chat session not found");
         }
+        return conversation;
     }
 
     private ChatSessionResponse toSessionResponse(
             AiConversation conversation,
-            List<AiMessage> messages
+            List<AiMessage> messages,
+            List<com.javaweb.listing.dto.PublicListingResponse> suggestedListings
     ) {
         User createdBy = conversation.getCreatedBy();
         return new ChatSessionResponse(
                 conversation.getId(),
                 conversation.getTitle(),
                 conversation.getStatus(),
-                createdBy.getId(),
-                createdBy.getFullName(),
+                createdBy == null ? null : createdBy.getId(),
+                createdBy == null ? null : createdBy.getFullName(),
+                conversation.getGuestSessionId(),
                 conversation.getLastMessageAt(),
                 conversation.getCreatedAt(),
-                messages.stream().map(this::toMessageResponse).toList()
+                messages.stream().map(this::toMessageResponse).toList(),
+                suggestedListings
         );
     }
 
@@ -197,6 +298,9 @@ public class ChatService {
     }
 
     private boolean isManagerOrAdmin(AuthUserPrincipal actor) {
+        if (actor == null) {
+            return false;
+        }
         return actor.roles().contains(RoleCode.ADMIN.name())
                 || actor.roles().contains(RoleCode.MANAGER.name());
     }
@@ -210,5 +314,27 @@ public class ChatService {
             return null;
         }
         return value.length() > maxLength ? value.substring(0, maxLength) : value;
+    }
+
+    private String normalizeGuestSessionId(String guestSessionId) {
+        String normalized = guestSessionId == null ? null : guestSessionId.trim();
+        if (normalized == null || normalized.isBlank()) {
+            return UUID.randomUUID().toString();
+        }
+        if (normalized.length() > 100) {
+            throw new BusinessException("guest session id must not exceed 100 characters");
+        }
+        return normalized;
+    }
+
+    private String requireGuestSessionId(String guestSessionId) {
+        String normalized = guestSessionId == null ? null : guestSessionId.trim();
+        if (normalized == null || normalized.isBlank()) {
+            throw new BusinessException("X-Guest-Session-Id header is required");
+        }
+        if (normalized.length() > 100) {
+            throw new BusinessException("guest session id must not exceed 100 characters");
+        }
+        return normalized;
     }
 }

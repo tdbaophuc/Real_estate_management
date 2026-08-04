@@ -37,6 +37,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,6 +46,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -305,6 +307,90 @@ class PropertyImageIntegrationTest {
 
         assertThat(propertyImageRepository.count()).isZero();
         assertThat(fileResourceRepository.count()).isZero();
+    }
+
+    @Test
+    void shouldUpdateImageMetadataAndReorderImages() throws Exception {
+        Property property = createProperty("PROP-D15-REORDER", creator, assignedAgent);
+        Long firstId = uploadImage(property.getId(), "first.png", "First", 20, creatorToken);
+        Long secondId = uploadImage(property.getId(), "second.png", "Second", 10, creatorToken);
+
+        mockMvc.perform(patch("/api/v1/properties/{propertyId}/images/{imageId}",
+                        property.getId(),
+                        firstId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(creatorToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "altText", "Updated first image",
+                                "displayOrder", 1
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Property image updated successfully"))
+                .andExpect(jsonPath("$.data.id").value(firstId))
+                .andExpect(jsonPath("$.data.altText").value("Updated first image"))
+                .andExpect(jsonPath("$.data.displayOrder").value(1));
+
+        mockMvc.perform(put("/api/v1/properties/{propertyId}/images/reorder", property.getId())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(managerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "items", List.of(
+                                        Map.of("imageId", secondId, "displayOrder", 0),
+                                        Map.of("imageId", firstId, "displayOrder", 1)
+                                )
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Property images reordered successfully"))
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].id").value(firstId))
+                .andExpect(jsonPath("$.data[0].displayOrder").value(1))
+                .andExpect(jsonPath("$.data[1].id").value(secondId))
+                .andExpect(jsonPath("$.data[1].displayOrder").value(0));
+
+        assertThat(propertyImageRepository.findAllByPropertyIdOrderByCoverImageDescDisplayOrderAscIdAsc(
+                property.getId()
+        ))
+                .extracting(PropertyImage::getId)
+                .containsExactly(firstId, secondId);
+    }
+
+    @Test
+    void shouldRejectInvalidImageMetadataAndUnknownImage() throws Exception {
+        Property property = createProperty("PROP-D15-INVALID", creator, assignedAgent);
+        Long imageId = uploadImage(property.getId(), "first.png", null, 0, creatorToken);
+
+        mockMvc.perform(patch("/api/v1/properties/{propertyId}/images/{imageId}",
+                        property.getId(),
+                        imageId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(creatorToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "altText", "x".repeat(300),
+                                "displayOrder", -1
+                        ))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        mockMvc.perform(put("/api/v1/properties/{propertyId}/images/reorder", property.getId())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(creatorToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "items", List.of()
+                        ))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        mockMvc.perform(patch("/api/v1/properties/{propertyId}/images/{imageId}",
+                        property.getId(),
+                        Long.MAX_VALUE)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(creatorToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "altText", "Valid",
+                                "displayOrder", 0
+                        ))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 
     private Long uploadImage(

@@ -84,6 +84,17 @@ public class SecurityConfig {
                                 "/api/v1/auth/logout"
                         ).permitAll()
                         .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/search/listings/*/inquiries",
+                                "/api/v1/search/listings/*/appointment-requests",
+                                "/api/v1/public/ai/chat/sessions",
+                                "/api/v1/public/ai/chat/sessions/*/messages"
+                        ).permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/public/ai/chat/sessions/*"
+                        ).permitAll()
+                        .requestMatchers(
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
@@ -93,7 +104,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/search/listings",
-                                "/api/v1/search/listings/**"
+                                "/api/v1/search/listings/**",
+                                "/api/v1/master-data/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

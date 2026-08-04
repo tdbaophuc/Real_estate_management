@@ -55,6 +55,47 @@ public interface ListingRepository
 
     @EntityGraph(attributePaths = {
             "property",
+            "property.assignedAgent",
+            "property.assignedAgent.roles",
+            "createdBy",
+            "createdBy.roles"
+    })
+    Optional<Listing> findPublicInteractionById(Long id);
+
+    @EntityGraph(attributePaths = {
+            "property",
+            "property.propertyType",
+            "property.address",
+            "property.address.province",
+            "property.address.district",
+            "property.address.ward",
+            "property.createdBy",
+            "property.assignedAgent",
+            "createdBy",
+            "reviewedBy",
+            "listingPackage"
+    })
+    List<Listing> findAllWithInternalDetailsByIdIn(List<Long> ids);
+
+    @EntityGraph(attributePaths = {
+            "property",
+            "property.propertyType",
+            "property.address",
+            "property.address.province",
+            "property.address.district",
+            "property.address.ward",
+            "property.createdBy",
+            "property.assignedAgent",
+            "createdBy",
+            "reviewedBy",
+            "listingPackage",
+            "statusHistories",
+            "statusHistories.changedBy"
+    })
+    Optional<Listing> findInternalDetailById(Long id);
+
+    @EntityGraph(attributePaths = {
+            "property",
             "createdBy",
             "reviewedBy",
             "listingPackage"

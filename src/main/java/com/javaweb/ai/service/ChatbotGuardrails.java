@@ -2,6 +2,7 @@ package com.javaweb.ai.service;
 
 import org.springframework.stereotype.Component;
 
+import java.text.Normalizer;
 import java.util.Locale;
 
 @Component
@@ -23,19 +24,27 @@ class ChatbotGuardrails {
     }
 
     boolean needsProfessionalReferral(String content) {
-        String normalized = content.toLowerCase(Locale.ROOT);
+        String normalized = normalize(content);
         return normalized.contains("phap ly")
-                || normalized.contains("pháp lý")
                 || normalized.contains("luat")
-                || normalized.contains("luật")
                 || normalized.contains("tax")
-                || normalized.contains("thue")
-                || normalized.contains("thuế")
+                || normalized.contains("thue thu")
+                || normalized.contains("thue thu nhap")
                 || normalized.contains("loan")
                 || normalized.contains("mortgage")
                 || normalized.contains("vay")
-                || normalized.contains("lai suat")
-                || normalized.contains("lãi suất");
+                || normalized.contains("lai suat");
+    }
+
+    private String normalize(String content) {
+        if (content == null) {
+            return "";
+        }
+        String lower = content.toLowerCase(Locale.ROOT);
+        return Normalizer.normalize(lower, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 
     String fallbackReply(String content, String aiErrorMessage) {

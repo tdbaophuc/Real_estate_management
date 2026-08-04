@@ -50,10 +50,11 @@ app:
       window: ${RATE_LIMIT_WINDOW:PT1M}
       auth-requests: ${AUTH_RATE_LIMIT_REQUESTS:20}
       ai-requests: ${AI_RATE_LIMIT_REQUESTS:60}
+      public-listing-requests: ${PUBLIC_LISTING_RATE_LIMIT_REQUESTS:30}
   storage:
     provider: ${STORAGE_PROVIDER:local}
     local-root: ${LOCAL_STORAGE_ROOT:./var/storage}
-    bucket: ${STORAGE_BUCKET:}
+    bucket: ${STORAGE_BUCKET:real-estate-management}
     endpoint: ${STORAGE_ENDPOINT:}
     region: ${STORAGE_REGION:auto}
     access-key: ${STORAGE_ACCESS_KEY:}
@@ -74,10 +75,11 @@ app:
     follow-up-look-ahead: ${FOLLOW_UP_REMINDER_LOOK_AHEAD:PT24H}
     batch-size: ${REMINDER_BATCH_SIZE:100}
   ai:
-    enabled: ${AI_ENABLED:false}
-    provider: ${AI_PROVIDER:noop}
-    api-key: ${AI_API_KEY:}
-    model: ${AI_MODEL:not-configured}
+    enabled: ${AI_ENABLED:true}
+    provider: ${AI_PROVIDER:openai}
+    api-key: ${AI_API_KEY:${AI_PROVIDER_OPENAI_KEY:}}
+    model: ${AI_LLM_MODEL:${AI_MODEL:not-configured}}
+    base-url: ${AI_PROVIDER_OPENAI_BASE_URL:https://api.openai.com/v1}
     timeout: ${AI_TIMEOUT:PT10S}
 
 springdoc:

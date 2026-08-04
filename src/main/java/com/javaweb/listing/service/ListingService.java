@@ -9,6 +9,9 @@ import com.javaweb.auth.security.AuthUserPrincipal;
 import com.javaweb.common.exception.BusinessException;
 import com.javaweb.common.exception.DuplicateResourceException;
 import com.javaweb.common.exception.ResourceNotFoundException;
+import com.javaweb.common.response.PageResponse;
+import com.javaweb.listing.dto.InternalListingDetailResponse;
+import com.javaweb.listing.dto.InternalListingSearchRequest;
 import com.javaweb.listing.dto.ListingCreateRequest;
 import com.javaweb.listing.dto.ListingResponse;
 import com.javaweb.listing.dto.ListingUpdateRequest;
@@ -18,26 +21,50 @@ import com.javaweb.listing.entity.ListingPackage;
 import com.javaweb.listing.enums.ListingPurpose;
 import com.javaweb.listing.enums.ListingStatus;
 import com.javaweb.listing.mapper.ListingMapper;
+import com.javaweb.listing.repository.ListingFavoriteRepository;
 import com.javaweb.listing.repository.ListingPackageRepository;
 import com.javaweb.listing.repository.ListingRepository;
+import com.javaweb.listing.repository.ListingSpecifications;
 import com.javaweb.property.entity.Property;
 import com.javaweb.property.enums.PropertyStatus;
 import com.javaweb.property.repository.PropertyRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class ListingService {
     private static final Set<ListingStatus> EDITABLE_STATUSES =
             Set.of(ListingStatus.DRAFT, ListingStatus.REJECTED);
+    private static final Map<String, String> INTERNAL_SORT_FIELDS = Map.ofEntries(
+            Map.entry("id", "id"),
+            Map.entry("code", "code"),
+            Map.entry("title", "title"),
+            Map.entry("status", "status"),
+            Map.entry("purpose", "purpose"),
+            Map.entry("askingPrice", "askingPrice"),
+            Map.entry("createdAt", "createdAt"),
+            Map.entry("updatedAt", "updatedAt"),
+            Map.entry("submittedAt", "submittedAt"),
+            Map.entry("reviewedAt", "reviewedAt"),
+            Map.entry("publishedAt", "publishedAt"),
+            Map.entry("viewCount", "viewCount")
+    );
 
     private final ListingRepository listingRepository;
     private final ListingPackageRepository listingPackageRepository;
+    private final ListingFavoriteRepository listingFavoriteRepository;
     private final PropertyRepository propertyRepository;
     private final UserRepository userRepository;
     private final ListingMapper listingMapper;
@@ -46,6 +73,7 @@ public class ListingService {
     public ListingService(
             ListingRepository listingRepository,
             ListingPackageRepository listingPackageRepository,
+            ListingFavoriteRepository listingFavoriteRepository,
             PropertyRepository propertyRepository,
             UserRepository userRepository,
             ListingMapper listingMapper,
@@ -53,10 +81,62 @@ public class ListingService {
     ) {
         this.listingRepository = listingRepository;
         this.listingPackageRepository = listingPackageRepository;
+        this.listingFavoriteRepository = listingFavoriteRepository;
         this.propertyRepository = propertyRepository;
         this.userRepository = userRepository;
         this.listingMapper = listingMapper;
         this.auditLogService = auditLogService;
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<InternalListingDetailResponse> search(
+            InternalListingSearchRequest request,
+            AuthUserPrincipal actor
+    ) {
+        String sortField = requireAllowedInternalSortField(request.sortBy());
+        Sort sort = Sort.by(request.sortDirection(), sortField)
+                .and(Sort.by(Sort.Direction.DESC, "id"));
+        Long visibleUserId = isManagerOrAdmin(actor) ? null : actor.id();
+        Page<Listing> page = listingRepository.findAll(
+                ListingSpecifications.internalSearch(request, visibleUserId),
+                PageRequest.of(request.page(), request.size(), sort)
+        );
+
+        List<Long> ids = page.getContent().stream()
+                .map(Listing::getId)
+                .toList();
+        Map<Long, Listing> listingsById = ids.isEmpty()
+                ? Map.of()
+                : listingRepository.findAllWithInternalDetailsByIdIn(ids).stream()
+                        .collect(Collectors.toMap(
+                                Listing::getId,
+                                Function.identity(),
+                                (left, right) -> left,
+                                LinkedHashMap::new
+                        ));
+        List<InternalListingDetailResponse> content = ids.stream()
+                .map(listingsById::get)
+                .map(listing -> listingMapper.toInternalDetailResponse(
+                        listing,
+                        listingFavoriteRepository.countByListingId(listing.getId())
+                ))
+                .toList();
+
+        return PageResponse.from(page, content);
+    }
+
+    @Transactional(readOnly = true)
+    public InternalListingDetailResponse get(Long listingId, AuthUserPrincipal actor) {
+        Listing listing = listingRepository.findInternalDetailById(listingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Listing not found"));
+        if (listing.getDeletedAt() != null || listing.getProperty().getDeletedAt() != null) {
+            throw new ResourceNotFoundException("Listing not found");
+        }
+        requireCanRead(listing, actor);
+        return listingMapper.toInternalDetailResponse(
+                listing,
+                listingFavoriteRepository.countByListingId(listing.getId())
+        );
     }
 
     @Transactional
@@ -315,6 +395,28 @@ public class ListingService {
         if (!listing.getCreatedBy().getId().equals(actor.id())) {
             throw new AccessDeniedException("Agents can only modify listings they created");
         }
+    }
+
+    private void requireCanRead(Listing listing, AuthUserPrincipal actor) {
+        if (isManagerOrAdmin(actor)) {
+            return;
+        }
+        boolean createdByActor = listing.getCreatedBy().getId().equals(actor.id());
+        boolean assignedToActor = listing.getProperty().getAssignedAgent() != null
+                && listing.getProperty().getAssignedAgent().getId().equals(actor.id());
+        if (!createdByActor && !assignedToActor) {
+            throw new AccessDeniedException("Agents can only read listings they created or are assigned");
+        }
+    }
+
+    private String requireAllowedInternalSortField(String sortBy) {
+        String field = INTERNAL_SORT_FIELDS.get(sortBy);
+        if (field == null) {
+            throw new BusinessException(
+                    "sortBy must be one of: id, code, title, status, purpose, askingPrice, createdAt, updatedAt, submittedAt, reviewedAt, publishedAt, viewCount"
+            );
+        }
+        return field;
     }
 
     private boolean isManagerOrAdmin(AuthUserPrincipal actor) {

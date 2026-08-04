@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -292,10 +293,105 @@ class ListingReviewWorkflowIntegrationTest {
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 
+    @Test
+    void shouldSearchInternalListingsWithFiltersAndVisibility() throws Exception {
+        Listing ownPending = createListing("LISTING-D19-SEARCH-OWN", agent);
+        submit(ownPending, agentToken);
+        Listing assignedListing = createListing("LISTING-D19-SEARCH-ASSIGNED", manager);
+        Property secondAgentProperty = createProperty(
+                "PROP-D19-SECOND",
+                "Day 19 Second Property",
+                secondAgent
+        );
+        Listing hiddenListing = createListing(
+                "LISTING-D19-SEARCH-HIDDEN",
+                secondAgent,
+                secondAgentProperty
+        );
+
+        mockMvc.perform(get("/api/v1/listings")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken))
+                        .queryParam("status", "PENDING_REVIEW")
+                        .queryParam("purpose", "SALE")
+                        .queryParam("createdBy", agent.getId().toString())
+                        .queryParam("propertyId", property.getId().toString())
+                        .queryParam("keyword", "SEARCH-OWN")
+                        .queryParam("page", "0")
+                        .queryParam("size", "10")
+                        .queryParam("sortBy", "createdAt")
+                        .queryParam("sortDirection", "DESC"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].id").value(ownPending.getId()))
+                .andExpect(jsonPath("$.data.content[0].status").value("PENDING_REVIEW"))
+                .andExpect(jsonPath("$.data.content[0].property.id").value(property.getId()))
+                .andExpect(jsonPath("$.data.content[0].creator.id").value(agent.getId()));
+
+        mockMvc.perform(get("/api/v1/listings")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken))
+                        .queryParam("keyword", "SEARCH")
+                        .queryParam("sortBy", "code")
+                        .queryParam("sortDirection", "ASC"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.content[0].id").value(assignedListing.getId()))
+                .andExpect(jsonPath("$.data.content[1].id").value(ownPending.getId()));
+
+        mockMvc.perform(get("/api/v1/listings/{id}", hiddenListing.getId())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        mockMvc.perform(get("/api/v1/listings")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(managerToken))
+                        .queryParam("keyword", "SEARCH-HIDDEN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].id").value(hiddenListing.getId()));
+    }
+
+    @Test
+    void shouldReturnInternalListingDetailWithSummariesHistoryAndCounts() throws Exception {
+        Listing listing = createListing("LISTING-D19-DETAIL", agent);
+        listing.setViewCount(3);
+        listing.addFavorite(manager);
+        listingRepository.saveAndFlush(listing);
+
+        submit(listing, agentToken);
+        mockMvc.perform(patch("/api/v1/listings/{id}/reject", listing.getId())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(managerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("reason", "Needs clearer photos"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/listings/{id}", listing.getId())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(listing.getId()))
+                .andExpect(jsonPath("$.data.code").value("LISTING-D19-DETAIL"))
+                .andExpect(jsonPath("$.data.property.id").value(property.getId()))
+                .andExpect(jsonPath("$.data.property.propertyTypeCode").value("APARTMENT"))
+                .andExpect(jsonPath("$.data.property.assignedAgentId").value(agent.getId()))
+                .andExpect(jsonPath("$.data.creator.id").value(agent.getId()))
+                .andExpect(jsonPath("$.data.reviewer.id").value(manager.getId()))
+                .andExpect(jsonPath("$.data.listingPackage").doesNotExist())
+                .andExpect(jsonPath("$.data.viewCount").value(3))
+                .andExpect(jsonPath("$.data.favoriteCount").value(1))
+                .andExpect(jsonPath("$.data.statusHistory.length()").value(2))
+                .andExpect(jsonPath("$.data.statusHistory[0].toStatus").value("REJECTED"))
+                .andExpect(jsonPath("$.data.statusHistory[0].changedBy.id").value(manager.getId()))
+                .andExpect(jsonPath("$.data.statusHistory[0].reason").value("Needs clearer photos"))
+                .andExpect(jsonPath("$.data.statusHistory[1].toStatus").value("PENDING_REVIEW"));
+    }
+
     private Listing createListing(String code, User creator) {
+        return createListing(code, creator, property);
+    }
+
+    private Listing createListing(String code, User creator, Property targetProperty) {
         Listing listing = new Listing(
                 code,
-                property,
+                targetProperty,
                 creator,
                 code + " Title",
                 code.toLowerCase(),
@@ -303,6 +399,20 @@ class ListingReviewWorkflowIntegrationTest {
                 ListingPurpose.SALE
         );
         return listingRepository.saveAndFlush(listing);
+    }
+
+    private Property createProperty(String code, String name, User assignedAgent) {
+        Address address = new Address(property.getAddress().getProvince(), code + " Street");
+        Property secondProperty = new Property(
+                code,
+                name,
+                propertyTypeRepository.findByCode("APARTMENT").orElseThrow(),
+                address,
+                assignedAgent,
+                PropertyPurpose.SALE
+        );
+        secondProperty.setAssignedAgent(assignedAgent);
+        return propertyRepository.saveAndFlush(secondProperty);
     }
 
     private void submit(Listing listing, String token) throws Exception {

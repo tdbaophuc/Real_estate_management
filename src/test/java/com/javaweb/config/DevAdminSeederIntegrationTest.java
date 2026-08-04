@@ -15,6 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
+        "app.security.jwt.secret=dGVzdC1vbmx5LWp3dC1zZWNyZXQtbXVzdC1iZS1hdC1sZWFzdC0zMi1ieXRlcw==",
         "app.seed.admin.enabled=true",
         "app.seed.admin.email=dev-admin@example.test",
         "app.seed.admin.password=StrongDevPassword123!",

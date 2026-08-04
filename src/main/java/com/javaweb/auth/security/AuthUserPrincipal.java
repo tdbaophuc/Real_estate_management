@@ -18,12 +18,42 @@ public record AuthUserPrincipal(
         String email,
         String password,
         String fullName,
+        String phone,
+        String avatarUrl,
         UserStatus status,
         Instant lockedUntil,
         List<String> roles,
         List<String> permissions,
         List<GrantedAuthority> authorities
 ) implements UserDetails {
+
+    public AuthUserPrincipal(
+            Long id,
+            String email,
+            String password,
+            String fullName,
+            UserStatus status,
+            Instant lockedUntil,
+            List<String> roles,
+            List<String> permissions,
+            List<?> authorities
+    ) {
+        this(
+                id,
+                email,
+                password,
+                fullName,
+                null,
+                null,
+                status,
+                lockedUntil,
+                roles,
+                permissions,
+                authorities.stream()
+                        .map(GrantedAuthority.class::cast)
+                        .toList()
+        );
+    }
 
     public static AuthUserPrincipal from(User user) {
         List<String> roles = user.getRoles().stream()
@@ -52,6 +82,10 @@ public record AuthUserPrincipal(
                 user.getEmail(),
                 user.getPasswordHash(),
                 user.getFullName(),
+                user.getPhone(),
+                user.getAvatarFileResource() == null
+                        ? null
+                        : user.getAvatarFileResource().getPublicUrl(),
                 user.getStatus(),
                 user.getLockedUntil(),
                 roles,

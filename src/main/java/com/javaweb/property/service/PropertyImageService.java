@@ -1,9 +1,13 @@
 package com.javaweb.property.service;
 
+import com.javaweb.audit.AuditActions;
+import com.javaweb.audit.service.AuditLogService;
 import com.javaweb.auth.enums.RoleCode;
 import com.javaweb.auth.security.AuthUserPrincipal;
 import com.javaweb.common.exception.BusinessException;
 import com.javaweb.common.exception.ResourceNotFoundException;
+import com.javaweb.property.dto.PropertyImageReorderRequest;
+import com.javaweb.property.dto.PropertyImageUpdateRequest;
 import com.javaweb.property.dto.PropertyImageResponse;
 import com.javaweb.property.entity.Property;
 import com.javaweb.property.entity.PropertyImage;
@@ -17,22 +21,28 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class PropertyImageService {
     private final PropertyRepository propertyRepository;
     private final PropertyImageRepository propertyImageRepository;
     private final FileResourceService fileResourceService;
+    private final AuditLogService auditLogService;
 
     public PropertyImageService(
             PropertyRepository propertyRepository,
             PropertyImageRepository propertyImageRepository,
-            FileResourceService fileResourceService
+            FileResourceService fileResourceService,
+            AuditLogService auditLogService
     ) {
         this.propertyRepository = propertyRepository;
         this.propertyImageRepository = propertyImageRepository;
         this.fileResourceService = fileResourceService;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional(readOnly = true)
@@ -76,6 +86,77 @@ public class PropertyImageService {
             fileResourceService.delete(resource);
             throw exception;
         }
+    }
+
+    @Transactional
+    public PropertyImageResponse updateMetadata(
+            Long propertyId,
+            Long imageId,
+            PropertyImageUpdateRequest request,
+            AuthUserPrincipal actor
+    ) {
+        Property property = requireActiveProperty(propertyId);
+        requireCanModify(property, actor);
+        PropertyImage image = requireImage(propertyId, imageId);
+        String oldAltText = image.getAltText();
+        int oldDisplayOrder = image.getDisplayOrder();
+        image.setAltText(normalizeAltText(request.altText()));
+        image.setDisplayOrder(request.displayOrder());
+        PropertyImage saved = propertyImageRepository.saveAndFlush(image);
+        auditLogService.record(
+                actor,
+                AuditActions.PROPERTY_IMAGE_UPDATED,
+                AuditActions.PROPERTY_IMAGE,
+                saved.getId(),
+                Map.of(
+                        "altText", oldAltText == null ? "" : oldAltText,
+                        "displayOrder", oldDisplayOrder
+                ),
+                Map.of(
+                        "altText", saved.getAltText() == null ? "" : saved.getAltText(),
+                        "displayOrder", saved.getDisplayOrder()
+                )
+        );
+        return PropertyImageResponse.from(saved);
+    }
+
+    @Transactional
+    public List<PropertyImageResponse> reorder(
+            Long propertyId,
+            PropertyImageReorderRequest request,
+            AuthUserPrincipal actor
+    ) {
+        Property property = requireActiveProperty(propertyId);
+        requireCanModify(property, actor);
+        if (request.items().isEmpty()) {
+            throw new BusinessException("items must not be empty");
+        }
+        Map<Long, Integer> previousOrders = new LinkedHashMap<>();
+        Map<Long, Integer> requestedOrders = new LinkedHashMap<>();
+        request.items().forEach(item -> {
+            if (requestedOrders.putIfAbsent(item.imageId(), item.displayOrder()) != null) {
+                throw new BusinessException("items must not contain duplicate imageId values");
+            }
+        });
+        for (var item : request.items()) {
+            PropertyImage image = requireImage(propertyId, item.imageId());
+            previousOrders.put(image.getId(), image.getDisplayOrder());
+            image.setDisplayOrder(item.displayOrder());
+        }
+        propertyImageRepository.flush();
+        auditLogService.record(
+                actor,
+                AuditActions.PROPERTY_IMAGES_REORDERED,
+                AuditActions.PROPERTY_IMAGE,
+                propertyId,
+                Map.of("orders", previousOrders),
+                Map.of("orders", requestedOrders)
+        );
+        return propertyImageRepository
+                .findAllByPropertyIdOrderByCoverImageDescDisplayOrderAscIdAsc(propertyId)
+                .stream()
+                .map(PropertyImageResponse::from)
+                .toList();
     }
 
     @Transactional

@@ -27,7 +27,7 @@ class DefaultAiServiceTest {
         AiProvider provider = mock(AiProvider.class);
         when(provider.name()).thenReturn("test");
         DefaultAiService service = new DefaultAiService(
-                new AiProperties(false, "test", "", "model-a", Duration.ofSeconds(1)),
+                new AiProperties(false, "test", "", "model-a", "https://example.test/v1", Duration.ofSeconds(1)),
                 List.of(provider, new NoopAiProvider()),
                 repository
         );
@@ -57,7 +57,7 @@ class DefaultAiServiceTest {
                 null
         ));
         DefaultAiService service = new DefaultAiService(
-                new AiProperties(true, "test", "secret", "model-a", Duration.ofSeconds(1)),
+                new AiProperties(true, "test", "secret", "model-a", "https://example.test/v1", Duration.ofSeconds(1)),
                 List.of(provider, new NoopAiProvider()),
                 repository
         );
@@ -77,7 +77,7 @@ class DefaultAiServiceTest {
         when(provider.name()).thenReturn("test");
         when(provider.complete(any())).thenThrow(new IllegalStateException("provider down"));
         DefaultAiService service = new DefaultAiService(
-                new AiProperties(true, "test", "secret", "model-a", Duration.ofSeconds(1)),
+                new AiProperties(true, "test", "secret", "model-a", "https://example.test/v1", Duration.ofSeconds(1)),
                 List.of(provider, new NoopAiProvider()),
                 repository
         );
@@ -109,7 +109,7 @@ class DefaultAiServiceTest {
             );
         });
         DefaultAiService service = new DefaultAiService(
-                new AiProperties(true, "test", "secret", "model-a", Duration.ofMillis(10)),
+                new AiProperties(true, "test", "secret", "model-a", "https://example.test/v1", Duration.ofMillis(10)),
                 List.of(provider, new NoopAiProvider()),
                 repository
         );

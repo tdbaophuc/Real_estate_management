@@ -23,6 +23,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -91,6 +92,83 @@ class UserManagementAuthorizationIntegrationTest {
                 .andExpect(jsonPath("$.data.id").value(customer.getId()))
                 .andExpect(jsonPath("$.data.email").value(customer.getEmail()))
                 .andExpect(jsonPath("$.data.roles[0]").value("CUSTOMER"));
+    }
+
+    @Test
+    void adminShouldCreateActiveUserThatCanLogin() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "new-agent@example.test",
+                                  "password": "NewAgentPassword123!",
+                                  "fullName": "New Agent",
+                                  "phone": "+84901234567",
+                                  "roles": ["AGENT"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("User created successfully"))
+                .andExpect(jsonPath("$.data.email").value("new-agent@example.test"))
+                .andExpect(jsonPath("$.data.fullName").value("New Agent"))
+                .andExpect(jsonPath("$.data.phone").value("+84901234567"))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.emailVerified").value(true))
+                .andExpect(jsonPath("$.data.roles[0]").value("AGENT"));
+
+        User created = userRepository.findWithRolesByEmailIgnoreCase("new-agent@example.test")
+                .orElseThrow();
+        assertThat(passwordEncoder.matches(
+                "NewAgentPassword123!",
+                created.getPasswordHash()
+        )).isTrue();
+        assertThat(created.getRoles())
+                .extracting(Role::getCode)
+                .containsExactly(RoleCode.AGENT);
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "email", "new-agent@example.test",
+                                "password", "NewAgentPassword123!"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.user.email").value("new-agent@example.test"));
+    }
+
+    @Test
+    void managerShouldNotCreateUsers() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(managerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "manager-created@example.test",
+                                  "password": "ManagerCreated123!",
+                                  "fullName": "Manager Created",
+                                  "roles": ["AGENT"]
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    void shouldRejectDuplicateEmailWhenCreatingUser() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "customer-users@example.test",
+                                  "password": "DuplicatePassword123!",
+                                  "fullName": "Duplicate User",
+                                  "roles": ["OWNER"]
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DUPLICATE_RESOURCE"));
     }
 
     @Test

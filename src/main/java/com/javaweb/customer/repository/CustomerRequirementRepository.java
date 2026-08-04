@@ -4,6 +4,7 @@ import com.javaweb.customer.entity.CustomerRequirement;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface CustomerRequirementRepository
         extends JpaRepository<CustomerRequirement, Long> {
@@ -12,4 +13,6 @@ public interface CustomerRequirementRepository
     );
 
     List<CustomerRequirement> findAllByCustomerIdOrderByCreatedAtDesc(Long customerId);
+
+    Optional<CustomerRequirement> findByIdAndCustomerId(Long id, Long customerId);
 }

@@ -1,12 +1,18 @@
 package com.javaweb.listing;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.javaweb.appointment.entity.Appointment;
+import com.javaweb.appointment.repository.AppointmentRepository;
 import com.javaweb.auth.entity.Role;
 import com.javaweb.auth.entity.User;
 import com.javaweb.auth.enums.RoleCode;
 import com.javaweb.auth.enums.UserStatus;
 import com.javaweb.auth.repository.RoleRepository;
 import com.javaweb.auth.repository.UserRepository;
+import com.javaweb.customer.entity.Customer;
+import com.javaweb.customer.repository.CustomerRepository;
+import com.javaweb.lead.entity.Lead;
+import com.javaweb.lead.repository.LeadRepository;
 import com.javaweb.listing.entity.Listing;
 import com.javaweb.listing.entity.ListingView;
 import com.javaweb.listing.enums.ListingPurpose;
@@ -15,13 +21,16 @@ import com.javaweb.listing.enums.ListingVisibility;
 import com.javaweb.listing.repository.ListingFavoriteRepository;
 import com.javaweb.listing.repository.ListingRepository;
 import com.javaweb.listing.repository.ListingViewRepository;
+import com.javaweb.notification.repository.NotificationRepository;
 import com.javaweb.property.entity.Address;
 import com.javaweb.property.entity.District;
 import com.javaweb.property.entity.Property;
+import com.javaweb.property.entity.PropertyImage;
 import com.javaweb.property.entity.PropertyType;
 import com.javaweb.property.entity.Province;
 import com.javaweb.property.entity.Ward;
 import com.javaweb.property.enums.PropertyPurpose;
+import com.javaweb.property.enums.PropertyStatus;
 import com.javaweb.property.repository.PropertyRepository;
 import com.javaweb.property.repository.PropertyTypeRepository;
 import com.javaweb.property.repository.ProvinceRepository;
@@ -76,6 +85,18 @@ class PublicListingSearchFavoriteIntegrationTest {
     private PropertyRepository propertyRepository;
 
     @Autowired
+    private CustomerRepository customerRepository;
+
+    @Autowired
+    private LeadRepository leadRepository;
+
+    @Autowired
+    private AppointmentRepository appointmentRepository;
+
+    @Autowired
+    private NotificationRepository notificationRepository;
+
+    @Autowired
     private PropertyTypeRepository propertyTypeRepository;
 
     @Autowired
@@ -105,6 +126,10 @@ class PublicListingSearchFavoriteIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        notificationRepository.deleteAll();
+        appointmentRepository.deleteAll();
+        leadRepository.deleteAll();
+        customerRepository.deleteAll();
         listingRepository.deleteAll();
         propertyRepository.deleteAll();
         provinceRepository.deleteAll();
@@ -166,6 +191,8 @@ class PublicListingSearchFavoriteIntegrationTest {
                 8,
                 Instant.now().minus(2, ChronoUnit.DAYS)
         );
+        addImage(riversideProperty, "/uploads/properties/riverside-cover.webp", true, 0);
+        addImage(riversideProperty, "/uploads/properties/riverside-gallery.webp", false, 1);
         downtown = createListing(
                 "LISTING-D20-DOWN",
                 downtownProperty,
@@ -231,6 +258,8 @@ class PublicListingSearchFavoriteIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(1))
                 .andExpect(jsonPath("$.data.content[0].code").value(riverside.getCode()))
+                .andExpect(jsonPath("$.data.content[0].coverImageUrl").value("/uploads/properties/riverside-cover.webp"))
+                .andExpect(jsonPath("$.data.content[0].images.length()").value(2))
                 .andExpect(jsonPath("$.data.content[0].provinceName").value("Day 20 City"))
                 .andExpect(jsonPath("$.data.content[0].wardName").value("Riverside Ward"));
     }
@@ -273,7 +302,9 @@ class PublicListingSearchFavoriteIntegrationTest {
                         .header("User-Agent", "Day20 Browser")
                         .header("Referer", "https://example.test/search"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.viewCount").value(9));
+                .andExpect(jsonPath("$.data.viewCount").value(9))
+                .andExpect(jsonPath("$.data.coverImageUrl").value("/uploads/properties/riverside-cover.webp"))
+                .andExpect(jsonPath("$.data.images[0].coverImage").value(true));
 
         mockMvc.perform(get("/api/v1/search/listings/{slug}", riverside.getSlug())
                         .header(HttpHeaders.AUTHORIZATION, bearer(customerToken))
@@ -346,6 +377,74 @@ class PublicListingSearchFavoriteIntegrationTest {
         assertThat(favoriteRepository.count()).isZero();
     }
 
+    @Test
+    void shouldCreateLeadAndMergeCustomerFromGuestListingInquiry() throws Exception {
+        Customer existing = new Customer("CUS-D20-INQUIRY", "Existing Inquiry Customer", agent);
+        existing.setEmail("guest-inquiry@example.test");
+        existing.setPhone("0900000999");
+        existing.setAssignedAgent(agent);
+        customerRepository.saveAndFlush(existing);
+
+        mockMvc.perform(post("/api/v1/search/listings/{id}/inquiries", riverside.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "fullName", "Guest Buyer",
+                                "email", "guest-inquiry@example.test",
+                                "phone", "0900000999",
+                                "message", "I want to learn more about this listing",
+                                "preferredContactMethod", "PHONE"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.sourceCode").value("LISTING_INQUIRY"))
+                .andExpect(jsonPath("$.data.customerId").value(existing.getId()))
+                .andExpect(jsonPath("$.data.listingId").value(riverside.getId()))
+                .andExpect(jsonPath("$.data.assignedAgentId").value(agent.getId()));
+
+        assertThat(customerRepository.count()).isEqualTo(1);
+        assertThat(leadRepository.count()).isEqualTo(1);
+        assertThat(notificationRepository.countByRecipientIdAndReadAtIsNull(agent.getId()))
+                .isEqualTo(1);
+    }
+
+    @Test
+    void shouldCreatePendingAppointmentAndLinkAuthenticatedCustomerProfile()
+            throws Exception {
+        Instant startAt = Instant.now().plus(3, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
+        Instant endAt = startAt.plus(1, ChronoUnit.HOURS);
+
+        mockMvc.perform(post(
+                                "/api/v1/search/listings/{id}/appointment-requests",
+                                riverside.getId()
+                        )
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "fullName", "Authenticated Customer",
+                                "email", customer.getEmail(),
+                                "phone", "0900000888",
+                                "preferredStartAt", startAt.toString(),
+                                "preferredEndAt", endAt.toString(),
+                                "message", "I want to view this home in the morning"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.listingId").value(riverside.getId()))
+                .andExpect(jsonPath("$.data.agentId").value(agent.getId()))
+                .andExpect(jsonPath("$.data.leadId").isNumber())
+                .andExpect(jsonPath("$.data.participants.length()").value(2));
+
+        Customer profile = customerRepository.findByUserIdAndDeletedAtIsNull(customer.getId())
+                .orElseThrow();
+        assertThat(profile.getEmail()).isEqualTo(customer.getEmail());
+        assertThat(profile.getAssignedAgent().getId()).isEqualTo(agent.getId());
+
+        Appointment appointment = appointmentRepository.findAll().getFirst();
+        assertThat(appointment.getStatus().name()).isEqualTo("PENDING");
+        assertThat(leadRepository.count()).isEqualTo(1);
+        assertThat(notificationRepository.countByRecipientIdAndReadAtIsNull(agent.getId()))
+                .isEqualTo(1);
+    }
+
     private Property createProperty(
             String code,
             String name,
@@ -362,6 +461,8 @@ class PublicListingSearchFavoriteIntegrationTest {
         address.setWard(ward);
         address.setFullAddress(code + " Street, " + ward.getName());
         Property property = new Property(code, name, type, address, agent, purpose);
+        property.setAssignedAgent(agent);
+        property.setStatus(PropertyStatus.AVAILABLE);
         property.setPrice(new BigDecimal(price));
         property.setLandArea(new BigDecimal(area));
         property.setFloorArea(new BigDecimal(area));
@@ -395,6 +496,15 @@ class PublicListingSearchFavoriteIntegrationTest {
         listing.setViewCount(viewCount);
         listing.setPublishedAt(publishedAt);
         return listingRepository.saveAndFlush(listing);
+    }
+
+    private void addImage(Property property, String imageUrl, boolean coverImage, int displayOrder) {
+        PropertyImage image = new PropertyImage(agent, imageUrl);
+        image.setCoverImage(coverImage);
+        image.setDisplayOrder(displayOrder);
+        image.setAltText(property.getName());
+        property.addImage(image);
+        propertyRepository.saveAndFlush(property);
     }
 
     private User createUser(String email, RoleCode roleCode) {

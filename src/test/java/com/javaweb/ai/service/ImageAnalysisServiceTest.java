@@ -1,6 +1,7 @@
 package com.javaweb.ai.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.javaweb.ai.config.AiProperties;
 import com.javaweb.ai.dto.ImageAnalysisRequest;
 import com.javaweb.ai.dto.ImageAnalysisResponse;
 import com.javaweb.ai.enums.AiRequestStatus;
@@ -38,7 +39,8 @@ class ImageAnalysisServiceTest {
             userRepository,
             List.of(new NoopImageAnalysisProvider()),
             analysisRepository,
-            new ObjectMapper()
+            new ObjectMapper(),
+            new AiProperties(false, "noop", "", "test-model", "https://example.test/v1", java.time.Duration.ofSeconds(1))
     );
 
     @Test
@@ -55,6 +57,7 @@ class ImageAnalysisServiceTest {
 
         assertThat(response.fallbackUsed()).isTrue();
         assertThat(response.aiStatus()).isEqualTo(AiRequestStatus.SKIPPED);
+        assertThat(response.model()).isEqualTo("test-model");
         assertThat(response.images()).hasSize(1);
         assertThat(response.images().getFirst().issues()).contains("Missing alt text or caption");
         verify(analysisRepository).save(any());

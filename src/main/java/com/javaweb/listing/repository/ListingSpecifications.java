@@ -1,6 +1,7 @@
 package com.javaweb.listing.repository;
 
 import com.javaweb.listing.dto.ListingSearchRequest;
+import com.javaweb.listing.dto.InternalListingSearchRequest;
 import com.javaweb.listing.entity.Listing;
 import com.javaweb.listing.enums.ListingStatus;
 import com.javaweb.listing.enums.ListingVisibility;
@@ -101,6 +102,55 @@ public final class ListingSpecifications {
                             root.get("property").get("bathrooms"),
                             request.bathrooms()
                     ));
+        }
+        return specification;
+    }
+
+    public static Specification<Listing> internalSearch(
+            InternalListingSearchRequest request,
+            Long visibleUserId
+    ) {
+        Specification<Listing> specification = (root, query, builder) -> builder.and(
+                builder.isNull(root.get("deletedAt")),
+                builder.isNull(root.get("property").get("deletedAt"))
+        );
+
+        if (visibleUserId != null) {
+            specification = specification.and((root, query, builder) -> builder.or(
+                    builder.equal(root.get("createdBy").get("id"), visibleUserId),
+                    builder.equal(root.get("property").get("assignedAgent").get("id"), visibleUserId)
+            ));
+        }
+        if (request.status() != null) {
+            specification = specification.and((root, query, builder) ->
+                    builder.equal(root.get("status"), request.status()));
+        }
+        if (request.purpose() != null) {
+            specification = specification.and((root, query, builder) ->
+                    builder.equal(root.get("purpose"), request.purpose()));
+        }
+        if (request.createdBy() != null) {
+            specification = specification.and((root, query, builder) ->
+                    builder.equal(root.get("createdBy").get("id"), request.createdBy()));
+        }
+        if (request.propertyId() != null) {
+            specification = specification.and((root, query, builder) ->
+                    builder.equal(root.get("property").get("id"), request.propertyId()));
+        }
+        if (StringUtils.hasText(request.keyword())) {
+            String keyword = "%" + request.keyword().trim().toLowerCase(Locale.ROOT) + "%";
+            specification = specification.and((root, query, builder) -> builder.or(
+                    builder.like(builder.lower(root.get("code")), keyword),
+                    builder.like(builder.lower(root.get("title")), keyword),
+                    builder.like(builder.lower(root.get("description")), keyword),
+                    builder.like(builder.lower(root.get("slug")), keyword),
+                    builder.like(builder.lower(root.get("property").get("code")), keyword),
+                    builder.like(builder.lower(root.get("property").get("name")), keyword),
+                    builder.like(
+                            builder.lower(root.get("property").get("address").get("fullAddress")),
+                            keyword
+                    )
+            ));
         }
         return specification;
     }

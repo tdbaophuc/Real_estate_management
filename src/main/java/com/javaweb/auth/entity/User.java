@@ -12,6 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -51,6 +52,10 @@ public class User {
 
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "avatar_file_resource_id")
+    private com.javaweb.storage.entity.FileResource avatarFileResource;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -164,5 +169,15 @@ public class User {
 
     public Set<Role> getRoles() {
         return roles;
+    }
+
+    public com.javaweb.storage.entity.FileResource getAvatarFileResource() {
+        return avatarFileResource;
+    }
+
+    public void setAvatarFileResource(
+            com.javaweb.storage.entity.FileResource avatarFileResource
+    ) {
+        this.avatarFileResource = avatarFileResource;
     }
 }

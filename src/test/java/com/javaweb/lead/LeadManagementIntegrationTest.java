@@ -1,6 +1,8 @@
 package com.javaweb.lead;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.javaweb.audit.AuditActions;
+import com.javaweb.audit.repository.AuditLogRepository;
 import com.javaweb.auth.entity.Role;
 import com.javaweb.auth.entity.User;
 import com.javaweb.auth.enums.RoleCode;
@@ -27,8 +29,10 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -48,6 +52,9 @@ class LeadManagementIntegrationTest {
 
     @Autowired
     private LeadRepository leadRepository;
+
+    @Autowired
+    private AuditLogRepository auditLogRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -71,6 +78,7 @@ class LeadManagementIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        auditLogRepository.deleteAll();
         leadRepository.deleteAll();
         userRepository.deleteAll();
 
@@ -226,6 +234,91 @@ class LeadManagementIntegrationTest {
     }
 
     @Test
+    void shouldManageStandaloneFollowUpTasksWithVisibilityAndAudit() throws Exception {
+        Long leadId = createLead(validRequest("LEAD-D24-TASK"), agentToken);
+        Long otherLeadId = createLead(
+                validRequest("LEAD-D24-TASK-OTHER"),
+                secondAgentToken
+        );
+        Long taskId = createTask(leadId, agentToken, "Send buyer shortlist", "HIGH");
+        Long otherTaskId = createTask(otherLeadId, secondAgentToken, "Hidden task", "LOW");
+
+        mockMvc.perform(get("/api/v1/follow-up-tasks")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(managerToken))
+                        .queryParam("status", "PENDING")
+                        .queryParam("keyword", "shortlist")
+                        .queryParam("sortBy", "dueAt")
+                        .queryParam("sortDirection", "ASC"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].id").value(taskId));
+
+        mockMvc.perform(get("/api/v1/follow-up-tasks/my")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].id").value(taskId));
+
+        mockMvc.perform(get("/api/v1/follow-up-tasks/{id}", otherTaskId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(put("/api/v1/follow-up-tasks/{id}", taskId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "title", "Send updated buyer shortlist",
+                                "description", "Include three apartments",
+                                "priority", "MEDIUM",
+                                "dueAt", Instant.now().plus(3, ChronoUnit.DAYS).toString(),
+                                "assignedAgentId", agent.getId()
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.title").value("Send updated buyer shortlist"))
+                .andExpect(jsonPath("$.data.priority").value("MEDIUM"));
+
+        mockMvc.perform(patch("/api/v1/follow-up-tasks/{id}/status", taskId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "status", "COMPLETED",
+                                "completedAt", Instant.now().truncatedTo(ChronoUnit.SECONDS).toString()
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.completedAt").isNotEmpty());
+
+        mockMvc.perform(delete("/api/v1/follow-up-tasks/{id}", taskId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/follow-up-tasks/{id}", taskId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.data.completedAt").doesNotExist());
+
+        assertThat(auditLogRepository
+                .findAllByActionAndResourceTypeAndResourceIdOrderByCreatedAtDesc(
+                        AuditActions.FOLLOW_UP_TASK_UPDATED,
+                        AuditActions.FOLLOW_UP_TASK,
+                        taskId
+                )).hasSize(1);
+        assertThat(auditLogRepository
+                .findAllByActionAndResourceTypeAndResourceIdOrderByCreatedAtDesc(
+                        AuditActions.FOLLOW_UP_TASK_STATUS_CHANGED,
+                        AuditActions.FOLLOW_UP_TASK,
+                        taskId
+                )).hasSize(1);
+        assertThat(auditLogRepository
+                .findAllByActionAndResourceTypeAndResourceIdOrderByCreatedAtDesc(
+                        AuditActions.FOLLOW_UP_TASK_CANCELLED,
+                        AuditActions.FOLLOW_UP_TASK,
+                        taskId
+                )).hasSize(1);
+    }
+
+    @Test
     void shouldValidateLeadWorkflowBusinessRules() throws Exception {
         Long leadId = createLead(validRequest("LEAD-D24-RULES"), agentToken);
         Long unassignedLeadId = createLead(
@@ -333,6 +426,24 @@ class LeadManagementIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer(token))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return objectMapper.readTree(response).at("/data/id").asLong();
+    }
+
+    private Long createTask(Long leadId, String token, String title, String priority)
+            throws Exception {
+        String response = mockMvc.perform(post("/api/v1/leads/{id}/follow-up-tasks", leadId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "title", title,
+                                "description", title + " description",
+                                "priority", priority,
+                                "dueAt", Instant.now().plus(2, ChronoUnit.DAYS).toString()
+                        ))))
                 .andExpect(status().isCreated())
                 .andReturn()
                 .getResponse()

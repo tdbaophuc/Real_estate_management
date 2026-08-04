@@ -69,6 +69,12 @@ public class RefreshTokenService {
         token.setRevokedAt(now);
     }
 
+    public int revokeAllActiveForUser(Long userId, Instant now) {
+        var tokens = refreshTokenRepository.findAllByUserIdAndRevokedAtIsNull(userId);
+        tokens.forEach(token -> token.setRevokedAt(now));
+        return tokens.size();
+    }
+
     private String hash(String rawToken) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

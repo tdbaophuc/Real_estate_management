@@ -10,12 +10,14 @@ public record AiProperties(
         String provider,
         String apiKey,
         String model,
+        String baseUrl,
         Duration timeout
 ) {
     public AiProperties {
-        provider = provider == null || provider.isBlank() ? "noop" : provider;
+        provider = provider == null || provider.isBlank() ? "openai" : provider;
         apiKey = apiKey == null ? "" : apiKey;
         model = model == null || model.isBlank() ? "not-configured" : model;
+        baseUrl = baseUrl == null || baseUrl.isBlank() ? "https://api.openai.com/v1" : baseUrl;
         timeout = timeout == null ? Duration.ofSeconds(10) : timeout;
     }
 

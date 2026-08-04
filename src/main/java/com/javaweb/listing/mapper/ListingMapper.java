@@ -18,11 +18,13 @@ import com.javaweb.listing.enums.ListingVisibility;
 import com.javaweb.property.entity.Address;
 import com.javaweb.property.entity.District;
 import com.javaweb.property.entity.Property;
+import com.javaweb.property.entity.PropertyImage;
 import com.javaweb.property.entity.Ward;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.Comparator;
+import java.util.List;
 
 @Component
 public class ListingMapper {
@@ -123,6 +125,19 @@ public class ListingMapper {
         Address address = property.getAddress();
         District district = address.getDistrict();
         Ward ward = address.getWard();
+        List<com.javaweb.listing.dto.PublicListingImageResponse> images = property.getImages().stream()
+                .sorted(Comparator
+                        .comparing(PropertyImage::isCoverImage).reversed()
+                        .thenComparing(PropertyImage::getDisplayOrder)
+                        .thenComparing(PropertyImage::getId))
+                .map(image -> new com.javaweb.listing.dto.PublicListingImageResponse(
+                        image.getId(),
+                        image.getImageUrl(),
+                        image.getAltText(),
+                        image.isCoverImage(),
+                        image.getDisplayOrder()
+                ))
+                .toList();
 
         return new PublicListingResponse(
                 listing.getId(),
@@ -151,6 +166,13 @@ public class ListingMapper {
                 ward == null ? null : ward.getName(),
                 address.getStreetAddress(),
                 address.getFullAddress(),
+                images.stream()
+                        .filter(com.javaweb.listing.dto.PublicListingImageResponse::coverImage)
+                        .findFirst()
+                        .or(() -> images.stream().findFirst())
+                        .map(com.javaweb.listing.dto.PublicListingImageResponse::imageUrl)
+                        .orElse(null),
+                images,
                 listing.getViewCount(),
                 listing.getPublishedAt(),
                 listing.getCreatedAt()

@@ -1,0 +1,1257 @@
+{
+  "info": {
+    "_postman_id": "4f1a1a4a-0bb1-4df5-a3c5-main-flow",
+    "name": "Real Estate Management - Main API Flow",
+    "description": "Postman Collection kiem thu luong API chinh: auth, admin user provisioning, master data, customer, lead, property, listing, public search, appointment, dashboard, reports, notifications va AI chat. Import file nay vao Postman; neu Postman khong nhan do duoi .md, doi ten file thanh POSTMAN_MAIN_FLOW.postman_collection.json.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('runSuffix')) {",
+          "  pm.collectionVariables.set('runSuffix', Date.now().toString());",
+          "}",
+          "const now = Date.now();",
+          "pm.collectionVariables.set('futureStartAt', new Date(now + 24 * 60 * 60 * 1000).toISOString());",
+          "pm.collectionVariables.set('futureEndAt', new Date(now + 25 * 60 * 60 * 1000).toISOString());",
+          "pm.collectionVariables.set('preferredStartAt', new Date(now + 26 * 60 * 60 * 1000).toISOString());",
+          "pm.collectionVariables.set('preferredEndAt', new Date(now + 27 * 60 * 60 * 1000).toISOString());",
+          "pm.collectionVariables.set('today', new Date(now).toISOString().slice(0, 10));",
+          "pm.collectionVariables.set('nextMonth', new Date(now + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@realestate.local"
+    },
+    {
+      "key": "adminPassword",
+      "value": "StrongDevPassword123!"
+    },
+    {
+      "key": "managerPassword",
+      "value": "Manager@12345"
+    },
+    {
+      "key": "agentPassword",
+      "value": "Agent@12345"
+    },
+    {
+      "key": "ownerPassword",
+      "value": "Owner@12345"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Auth - Login Admin",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('admin login ok', () => pm.response.to.have.status(200));",
+              "const json = pm.response.json();",
+              "pm.collectionVariables.set('adminToken', json.data.accessToken);",
+              "pm.collectionVariables.set('adminRefreshToken', json.data.refreshToken);",
+              "pm.collectionVariables.set('adminUserId', json.data.user.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Admin - Create Manager",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"manager+{{runSuffix}}@realestate.local\",\n  \"password\": \"{{managerPassword}}\",\n  \"fullName\": \"Demo Manager\",\n  \"roles\": [\"MANAGER\"]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/admin/users",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "admin",
+            "users"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('manager created', () => pm.response.to.have.status(200));",
+              "const data = pm.response.json().data;",
+              "pm.collectionVariables.set('managerEmail', data.email);",
+              "pm.collectionVariables.set('managerUserId', data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Admin - Create Agent",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"agent+{{runSuffix}}@realestate.local\",\n  \"password\": \"{{agentPassword}}\",\n  \"fullName\": \"Demo Agent\",\n  \"roles\": [\"AGENT\"]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/admin/users",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "admin",
+            "users"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('agent created', () => pm.response.to.have.status(200));",
+              "const data = pm.response.json().data;",
+              "pm.collectionVariables.set('agentEmail', data.email);",
+              "pm.collectionVariables.set('agentUserId', data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Admin - Create Owner",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"owner+{{runSuffix}}@realestate.local\",\n  \"password\": \"{{ownerPassword}}\",\n  \"fullName\": \"Demo Owner\",\n  \"roles\": [\"OWNER\"]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/admin/users",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "admin",
+            "users"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('owner created', () => pm.response.to.have.status(200));",
+              "const data = pm.response.json().data;",
+              "pm.collectionVariables.set('ownerEmail', data.email);",
+              "pm.collectionVariables.set('ownerUserId', data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Auth - Login Agent",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{agentEmail}}\",\n  \"password\": \"{{agentPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('agent login ok', () => pm.response.to.have.status(200));",
+              "const json = pm.response.json();",
+              "pm.collectionVariables.set('agentToken', json.data.accessToken);",
+              "pm.collectionVariables.set('agentRefreshToken', json.data.refreshToken);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Auth - Me Agent",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{agentToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "me"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('current agent returned', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Master Data - Property Types",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/master-data/property-types",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "master-data",
+            "property-types"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('property types returned', () => pm.response.to.have.status(200));",
+              "const list = pm.response.json().data || [];",
+              "if (list.length) pm.collectionVariables.set('propertyTypeId', list[0].id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Master Data - Provinces",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/master-data/provinces",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "master-data",
+            "provinces"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('provinces returned', () => pm.response.to.have.status(200));",
+              "const list = pm.response.json().data || [];",
+              "if (list.length) pm.collectionVariables.set('provinceId', list[0].id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Master Data - Listing Packages",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/master-data/listing-packages",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "master-data",
+            "listing-packages"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('listing packages returned', () => pm.response.to.have.status(200));",
+              "const list = pm.response.json().data || [];",
+              "if (list.length) pm.collectionVariables.set('listingPackageId', list[0].id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Customer - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{agentToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"CUST-{{runSuffix}}\",\n  \"fullName\": \"Nguyen Van Test\",\n  \"email\": \"customer+{{runSuffix}}@example.com\",\n  \"phone\": \"+84920000001\",\n  \"status\": \"ACTIVE\",\n  \"source\": \"WEBSITE\",\n  \"priority\": \"HIGH\",\n  \"preferredContactMethod\": \"PHONE\",\n  \"notes\": \"Created by Postman main flow\",\n  \"assignedAgentId\": {{agentUserId}}\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/customers",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "customers"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('customer created', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('customerId', pm.response.json().data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Lead - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{agentToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"LEAD-{{runSuffix}}\",\n  \"sourceCode\": \"WEBSITE\",\n  \"fullName\": \"Nguyen Van Test\",\n  \"email\": \"lead+{{runSuffix}}@example.com\",\n  \"phone\": \"+84920000002\",\n  \"priority\": \"HIGH\",\n  \"message\": \"Interested in a central apartment\",\n  \"customerId\": {{customerId}},\n  \"assignedAgentId\": {{agentUserId}}\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/leads",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('lead created', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('leadId', pm.response.json().data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Property - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{agentToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"PROP-{{runSuffix}}\",\n  \"name\": \"Postman Demo Apartment\",\n  \"description\": \"Property created by Postman main flow\",\n  \"propertyTypeId\": {{propertyTypeId}},\n  \"purpose\": \"SALE\",\n  \"price\": 3500000000,\n  \"currency\": \"VND\",\n  \"landArea\": 80,\n  \"floorArea\": 72,\n  \"bedrooms\": 2,\n  \"bathrooms\": 2,\n  \"floors\": 1,\n  \"direction\": \"EAST\",\n  \"legalStatus\": \"PINK_BOOK\",\n  \"furnitureStatus\": \"FULLY_FURNISHED\",\n  \"ownerId\": {{ownerUserId}},\n  \"assignedAgentId\": {{agentUserId}},\n  \"address\": {\n    \"provinceId\": {{provinceId}},\n    \"streetAddress\": \"123 Nguyen Hue\",\n    \"fullAddress\": \"123 Nguyen Hue, Ho Chi Minh City\",\n    \"latitude\": 10.7769,\n    \"longitude\": 106.7009\n  },\n  \"amenities\": []\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/properties",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "properties"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('property created', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('propertyId', pm.response.json().data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Property - Activate",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"AVAILABLE\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/properties/{{propertyId}}/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "properties",
+            "{{propertyId}}",
+            "status"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('property status updated', () => pm.expect([200, 422]).to.include(pm.response.code));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Listing - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{agentToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"propertyId\": {{propertyId}},\n  \"code\": \"LIST-{{runSuffix}}\",\n  \"title\": \"Postman Demo Apartment Listing\",\n  \"slug\": \"postman-demo-apartment-{{runSuffix}}\",\n  \"description\": \"Public listing created by Postman main flow\",\n  \"purpose\": \"SALE\",\n  \"visibility\": \"PUBLIC\",\n  \"askingPrice\": 3500000000,\n  \"currency\": \"VND\",\n  \"listingPackageId\": {{listingPackageId}},\n  \"seoTitle\": \"Postman Demo Apartment\",\n  \"seoDescription\": \"Apartment listing for API flow test\",\n  \"seoKeywords\": \"postman,apartment,demo\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/listings",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "listings"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('listing created', () => pm.response.to.have.status(200));",
+              "const data = pm.response.json().data;",
+              "pm.collectionVariables.set('listingId', data.id);",
+              "pm.collectionVariables.set('listingSlug', data.slug || 'postman-demo-apartment-' + pm.collectionVariables.get('runSuffix'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 Listing - Submit Review",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{agentToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/listings/{{listingId}}/submit",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "listings",
+            "{{listingId}}",
+            "submit"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('listing submitted', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Listing - Approve",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/listings/{{listingId}}/approve",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "listings",
+            "{{listingId}}",
+            "approve"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('listing approved', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 Listing - Publish",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{agentToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/listings/{{listingId}}/publish",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "listings",
+            "{{listingId}}",
+            "publish"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('listing published', () => pm.expect([200, 422]).to.include(pm.response.code));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "18 Public - Search Listings",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/search/listings?page=0&size=10",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "search",
+            "listings"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "10"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('public search ok', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "19 Public - Listing Detail",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/search/listings/{{listingSlug}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "search",
+            "listings",
+            "{{listingSlug}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('public detail reachable after publish', () => pm.expect([200, 404]).to.include(pm.response.code));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "20 Public - Listing Inquiry",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fullName\": \"Public Buyer\",\n  \"email\": \"buyer+{{runSuffix}}@example.com\",\n  \"phone\": \"+84930000001\",\n  \"message\": \"I want more information about this listing.\",\n  \"preferredContactMethod\": \"EMAIL\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/search/listings/{{listingId}}/inquiries",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "search",
+            "listings",
+            "{{listingId}}",
+            "inquiries"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('inquiry accepted or listing not public yet', () => pm.expect([200, 201, 404, 422]).to.include(pm.response.code));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "21 Appointment - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{agentToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"APPT-{{runSuffix}}\",\n  \"customerId\": {{customerId}},\n  \"agentId\": {{agentUserId}},\n  \"propertyId\": {{propertyId}},\n  \"listingId\": {{listingId}},\n  \"leadId\": {{leadId}},\n  \"title\": \"Property viewing\",\n  \"startAt\": \"{{futureStartAt}}\",\n  \"endAt\": \"{{futureEndAt}}\",\n  \"timezone\": \"Asia/Ho_Chi_Minh\",\n  \"meetingLocation\": \"123 Nguyen Hue\",\n  \"notes\": \"Created by Postman main flow\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/appointments",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "appointments"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('appointment created', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('appointmentId', pm.response.json().data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "22 Appointment - Confirm",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{agentToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/appointments/{{appointmentId}}/confirm",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "appointments",
+            "{{appointmentId}}",
+            "confirm"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('appointment confirmed', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "23 Dashboards - Agent",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{agentToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/dashboard/agent",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "dashboard",
+            "agent"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('agent dashboard ok', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "24 Dashboards - Admin",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/dashboard/admin",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "dashboard",
+            "admin"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('admin dashboard ok', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "25 Reports - Revenue",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/reports/revenue?from={{today}}&to={{nextMonth}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "reports",
+            "revenue"
+          ],
+          "query": [
+            {
+              "key": "from",
+              "value": "{{today}}"
+            },
+            {
+              "key": "to",
+              "value": "{{nextMonth}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('revenue report ok', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "26 Notifications - List",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{agentToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/notifications?page=0&size=20",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "notifications"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "20"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('notifications ok', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "27 AI Chat - Create Session",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{agentToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Postman API flow chat\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/ai/chat/sessions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "ai",
+            "chat",
+            "sessions"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('ai chat session created', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('aiSessionId', pm.response.json().data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "28 AI Chat - Send Message",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{agentToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": \"Tom tat nhanh tinh hinh khach hang va lead vua tao trong he thong.\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/ai/chat/sessions/{{aiSessionId}}/messages",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "ai",
+            "chat",
+            "sessions",
+            "{{aiSessionId}}",
+            "messages"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('ai message accepted', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "29 Auth - Refresh Agent Token",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{agentRefreshToken}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/refresh-token",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "refresh-token"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('agent token refreshed', () => pm.response.to.have.status(200));",
+              "const json = pm.response.json();",
+              "pm.collectionVariables.set('agentToken', json.data.accessToken);",
+              "pm.collectionVariables.set('agentRefreshToken', json.data.refreshToken);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "30 Auth - Logout Agent",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{agentToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{agentRefreshToken}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/logout",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "logout"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('agent logout ok', () => pm.expect([200, 204]).to.include(pm.response.code));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

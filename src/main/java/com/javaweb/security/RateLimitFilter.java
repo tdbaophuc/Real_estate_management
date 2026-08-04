@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
     private static final String AI_PREFIX = "/api/v1/ai/";
+    private static final String PUBLIC_AI_PREFIX = "/api/v1/public/ai/";
     private static final String PUBLIC_LISTING_PREFIX = "/api/v1/search/listings/";
     private static final Map<String, HttpMethod> AUTH_ENDPOINTS = Map.of(
             "/api/v1/auth/register", HttpMethod.POST,
@@ -100,7 +101,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
         String path = request.getRequestURI();
         HttpMethod method = HttpMethod.valueOf(request.getMethod());
-        if (path.startsWith(AI_PREFIX)) {
+        if (path.startsWith(AI_PREFIX) || path.startsWith(PUBLIC_AI_PREFIX)) {
             return new Limit("ai", properties.aiRequests());
         }
         if (HttpMethod.POST.matches(request.getMethod())

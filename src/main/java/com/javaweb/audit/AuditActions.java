@@ -1,6 +1,7 @@
 package com.javaweb.audit;
 
 public final class AuditActions {
+    public static final String USER_CREATED = "USER_CREATED";
     public static final String USER_STATUS_CHANGED = "USER_STATUS_CHANGED";
     public static final String USER_ROLES_CHANGED = "USER_ROLES_CHANGED";
     public static final String LISTING_APPROVED = "LISTING_APPROVED";

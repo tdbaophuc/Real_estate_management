@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class ChatService {
@@ -62,6 +63,23 @@ public class ChatService {
         AiConversation conversation = new AiConversation(
                 creator,
                 request.title() == null ? "AI chat session" : request.title()
+        );
+        return toSessionResponse(
+                conversationRepository.saveAndFlush(conversation),
+                List.of(),
+                List.of()
+        );
+    }
+
+    @Transactional
+    public ChatSessionResponse createGuestSession(
+            ChatSessionCreateRequest request,
+            String guestSessionId
+    ) {
+        String resolvedGuestSessionId = normalizeGuestSessionId(guestSessionId);
+        AiConversation conversation = new AiConversation(
+                resolvedGuestSessionId,
+                request.title() == null ? "Guest AI chat session" : request.title()
         );
         return toSessionResponse(
                 conversationRepository.saveAndFlush(conversation),
@@ -134,9 +152,84 @@ public class ChatService {
         );
     }
 
+    @Transactional
+    public ChatSessionResponse sendGuestMessage(
+            Long sessionId,
+            ChatMessageRequest request,
+            String guestSessionId
+    ) {
+        AiConversation conversation = requireAccessibleGuestConversation(sessionId, guestSessionId);
+        if (conversation.getStatus() != AiConversationStatus.OPEN) {
+            throw new BusinessException("Chat session is closed");
+        }
+
+        AiMessage userMessage = new AiMessage(AiMessageRole.USER, request.content());
+        conversation.addMessage(userMessage);
+        messageRepository.saveAndFlush(userMessage);
+
+        List<AiMessage> history = messageRepository.findAllByConversationIdOrderByCreatedAtAsc(sessionId);
+        ChatContextBuilder.ChatContext context = contextBuilder.buildGuest(
+                request.content(),
+                history,
+                conversation.getGuestSessionId()
+        );
+        if (guardrails.needsProfessionalReferral(request.content())) {
+            AiMessage assistantMessage = new AiMessage(AiMessageRole.ASSISTANT, limit(context.fallbackReply(), 8000));
+            assistantMessage.setAiResult(
+                    AiRequestStatus.SKIPPED,
+                    "guardrails",
+                    "guardrails",
+                    null
+            );
+            conversation.addMessage(assistantMessage);
+            messageRepository.saveAndFlush(assistantMessage);
+            conversationRepository.saveAndFlush(conversation);
+            return toSessionResponse(
+                    conversation,
+                    messageRepository.findAllByConversationIdOrderByCreatedAtAsc(sessionId),
+                    List.of()
+            );
+        }
+
+        AiCompletionResponse aiResponse = aiService.complete(new AiCompletionRequest(
+                OPERATION,
+                context.systemPrompt(),
+                context.userPrompt(),
+                "ai_conversation",
+                conversation.getId(),
+                context.metadataJson()
+        ));
+        String reply = aiResponse.status() == AiRequestStatus.SUCCESS && hasText(aiResponse.content())
+                ? aiResponse.content().trim()
+                : context.fallbackReply();
+        AiMessage assistantMessage = new AiMessage(AiMessageRole.ASSISTANT, limit(reply, 8000));
+        assistantMessage.setAiResult(
+                aiResponse.status(),
+                aiResponse.provider(),
+                aiResponse.model(),
+                limit(aiResponse.errorMessage(), 1000)
+        );
+        conversation.addMessage(assistantMessage);
+        messageRepository.saveAndFlush(assistantMessage);
+        conversationRepository.saveAndFlush(conversation);
+
+        return toSessionResponse(
+                conversation,
+                messageRepository.findAllByConversationIdOrderByCreatedAtAsc(sessionId),
+                context.suggestedListings()
+        );
+    }
+
     @Transactional(readOnly = true)
     public ChatSessionResponse getSession(Long sessionId, AuthUserPrincipal actor) {
         AiConversation conversation = requireAccessibleConversation(sessionId, actor);
+        List<AiMessage> messages = messageRepository.findAllByConversationIdOrderByCreatedAtAsc(sessionId);
+        return toSessionResponse(conversation, messages, List.of());
+    }
+
+    @Transactional(readOnly = true)
+    public ChatSessionResponse getGuestSession(Long sessionId, String guestSessionId) {
+        AiConversation conversation = requireAccessibleGuestConversation(sessionId, guestSessionId);
         List<AiMessage> messages = messageRepository.findAllByConversationIdOrderByCreatedAtAsc(sessionId);
         return toSessionResponse(conversation, messages, List.of());
     }
@@ -147,9 +240,26 @@ public class ChatService {
     ) {
         AiConversation conversation = conversationRepository.findWithMessagesById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Chat session not found"));
+        if (conversation.getCreatedBy() == null) {
+            throw new AccessDeniedException("Guest chat sessions require guest access");
+        }
         if (!isManagerOrAdmin(actor)
                 && !conversation.getCreatedBy().getId().equals(actor.id())) {
             throw new AccessDeniedException("Users can only access their own chat sessions");
+        }
+        return conversation;
+    }
+
+    private AiConversation requireAccessibleGuestConversation(
+            Long sessionId,
+            String guestSessionId
+    ) {
+        String normalizedGuestSessionId = requireGuestSessionId(guestSessionId);
+        AiConversation conversation = conversationRepository.findWithMessagesById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Chat session not found"));
+        if (conversation.getCreatedBy() != null
+                || !normalizedGuestSessionId.equals(conversation.getGuestSessionId())) {
+            throw new ResourceNotFoundException("Chat session not found");
         }
         return conversation;
     }
@@ -164,8 +274,9 @@ public class ChatService {
                 conversation.getId(),
                 conversation.getTitle(),
                 conversation.getStatus(),
-                createdBy.getId(),
-                createdBy.getFullName(),
+                createdBy == null ? null : createdBy.getId(),
+                createdBy == null ? null : createdBy.getFullName(),
+                conversation.getGuestSessionId(),
                 conversation.getLastMessageAt(),
                 conversation.getCreatedAt(),
                 messages.stream().map(this::toMessageResponse).toList(),
@@ -187,6 +298,9 @@ public class ChatService {
     }
 
     private boolean isManagerOrAdmin(AuthUserPrincipal actor) {
+        if (actor == null) {
+            return false;
+        }
         return actor.roles().contains(RoleCode.ADMIN.name())
                 || actor.roles().contains(RoleCode.MANAGER.name());
     }
@@ -200,5 +314,27 @@ public class ChatService {
             return null;
         }
         return value.length() > maxLength ? value.substring(0, maxLength) : value;
+    }
+
+    private String normalizeGuestSessionId(String guestSessionId) {
+        String normalized = guestSessionId == null ? null : guestSessionId.trim();
+        if (normalized == null || normalized.isBlank()) {
+            return UUID.randomUUID().toString();
+        }
+        if (normalized.length() > 100) {
+            throw new BusinessException("guest session id must not exceed 100 characters");
+        }
+        return normalized;
+    }
+
+    private String requireGuestSessionId(String guestSessionId) {
+        String normalized = guestSessionId == null ? null : guestSessionId.trim();
+        if (normalized == null || normalized.isBlank()) {
+            throw new BusinessException("X-Guest-Session-Id header is required");
+        }
+        if (normalized.length() > 100) {
+            throw new BusinessException("guest session id must not exceed 100 characters");
+        }
+        return normalized;
     }
 }

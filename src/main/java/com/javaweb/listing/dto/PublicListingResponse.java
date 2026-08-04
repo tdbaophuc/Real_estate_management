@@ -5,6 +5,7 @@ import com.javaweb.listing.enums.ListingStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 public record PublicListingResponse(
         Long id,
@@ -33,6 +34,8 @@ public record PublicListingResponse(
         String wardName,
         String streetAddress,
         String fullAddress,
+        String coverImageUrl,
+        List<PublicListingImageResponse> images,
         long viewCount,
         Instant publishedAt,
         Instant createdAt

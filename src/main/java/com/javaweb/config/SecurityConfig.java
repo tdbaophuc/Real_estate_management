@@ -86,7 +86,13 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/search/listings/*/inquiries",
-                                "/api/v1/search/listings/*/appointment-requests"
+                                "/api/v1/search/listings/*/appointment-requests",
+                                "/api/v1/public/ai/chat/sessions",
+                                "/api/v1/public/ai/chat/sessions/*/messages"
+                        ).permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/public/ai/chat/sessions/*"
                         ).permitAll()
                         .requestMatchers(
                                 "/v3/api-docs/**",

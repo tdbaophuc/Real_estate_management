@@ -25,6 +25,7 @@ import com.javaweb.notification.repository.NotificationRepository;
 import com.javaweb.property.entity.Address;
 import com.javaweb.property.entity.District;
 import com.javaweb.property.entity.Property;
+import com.javaweb.property.entity.PropertyImage;
 import com.javaweb.property.entity.PropertyType;
 import com.javaweb.property.entity.Province;
 import com.javaweb.property.entity.Ward;
@@ -190,6 +191,8 @@ class PublicListingSearchFavoriteIntegrationTest {
                 8,
                 Instant.now().minus(2, ChronoUnit.DAYS)
         );
+        addImage(riversideProperty, "/uploads/properties/riverside-cover.webp", true, 0);
+        addImage(riversideProperty, "/uploads/properties/riverside-gallery.webp", false, 1);
         downtown = createListing(
                 "LISTING-D20-DOWN",
                 downtownProperty,
@@ -255,6 +258,8 @@ class PublicListingSearchFavoriteIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(1))
                 .andExpect(jsonPath("$.data.content[0].code").value(riverside.getCode()))
+                .andExpect(jsonPath("$.data.content[0].coverImageUrl").value("/uploads/properties/riverside-cover.webp"))
+                .andExpect(jsonPath("$.data.content[0].images.length()").value(2))
                 .andExpect(jsonPath("$.data.content[0].provinceName").value("Day 20 City"))
                 .andExpect(jsonPath("$.data.content[0].wardName").value("Riverside Ward"));
     }
@@ -297,7 +302,9 @@ class PublicListingSearchFavoriteIntegrationTest {
                         .header("User-Agent", "Day20 Browser")
                         .header("Referer", "https://example.test/search"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.viewCount").value(9));
+                .andExpect(jsonPath("$.data.viewCount").value(9))
+                .andExpect(jsonPath("$.data.coverImageUrl").value("/uploads/properties/riverside-cover.webp"))
+                .andExpect(jsonPath("$.data.images[0].coverImage").value(true));
 
         mockMvc.perform(get("/api/v1/search/listings/{slug}", riverside.getSlug())
                         .header(HttpHeaders.AUTHORIZATION, bearer(customerToken))
@@ -489,6 +496,15 @@ class PublicListingSearchFavoriteIntegrationTest {
         listing.setViewCount(viewCount);
         listing.setPublishedAt(publishedAt);
         return listingRepository.saveAndFlush(listing);
+    }
+
+    private void addImage(Property property, String imageUrl, boolean coverImage, int displayOrder) {
+        PropertyImage image = new PropertyImage(agent, imageUrl);
+        image.setCoverImage(coverImage);
+        image.setDisplayOrder(displayOrder);
+        image.setAltText(property.getName());
+        property.addImage(image);
+        propertyRepository.saveAndFlush(property);
     }
 
     private User createUser(String email, RoleCode roleCode) {

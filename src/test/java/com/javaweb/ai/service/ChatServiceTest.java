@@ -83,8 +83,78 @@ class ChatServiceTest {
         assertThat(response.id()).isEqualTo(100L);
         assertThat(response.title()).isEqualTo("Find apartment");
         assertThat(response.createdById()).isEqualTo(10L);
+        assertThat(response.guestSessionId()).isNull();
         assertThat(response.messages()).isEmpty();
         assertThat(response.suggestedListings()).isEmpty();
+    }
+
+    @Test
+    void shouldCreateGuestChatSessionWithoutAuthenticatedUser() {
+        when(conversationRepository.saveAndFlush(any())).thenAnswer(invocation -> {
+            AiConversation conversation = invocation.getArgument(0);
+            ReflectionTestUtils.setField(conversation, "id", 101L);
+            return conversation;
+        });
+
+        ChatSessionResponse response = service.createGuestSession(
+                new ChatSessionCreateRequest("Landing chat"),
+                "guest-browser-session"
+        );
+
+        assertThat(response.id()).isEqualTo(101L);
+        assertThat(response.title()).isEqualTo("Landing chat");
+        assertThat(response.createdById()).isNull();
+        assertThat(response.createdByName()).isNull();
+        assertThat(response.guestSessionId()).isEqualTo("guest-browser-session");
+        assertThat(response.messages()).isEmpty();
+    }
+
+    @Test
+    void shouldSendGuestMessageWithPublicListingContext() {
+        User user = user(10L);
+        AiConversation conversation = guestConversation("guest-browser-session");
+        Listing candidate = listing(99L, user);
+        when(conversationRepository.findWithMessagesById(101L)).thenReturn(Optional.of(conversation));
+        when(messageRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(messageRepository.findAllByConversationIdOrderByCreatedAtAsc(101L))
+                .thenReturn(
+                        List.of(new AiMessage(AiMessageRole.USER, "Toi muon thue can ho 2 phong ngu 15 trieu")),
+                        List.of(
+                                new AiMessage(AiMessageRole.USER, "Toi muon thue can ho 2 phong ngu 15 trieu"),
+                                assistant("Toi tim duoc mot can ho phu hop.", AiRequestStatus.SUCCESS)
+                        )
+                );
+        when(listingRepository.findRecommendationCandidates(
+                eq(ListingPurpose.RENT),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
+        )).thenReturn(new PageImpl<>(List.of(candidate)));
+        when(aiService.complete(any())).thenReturn(new AiCompletionResponse(
+                AiRequestStatus.SUCCESS,
+                "test-provider",
+                "test-model",
+                "Toi tim duoc mot can ho phu hop.",
+                "STOP",
+                20,
+                30,
+                50,
+                null
+        ));
+
+        ChatSessionResponse response = service.sendGuestMessage(
+                101L,
+                new ChatMessageRequest("Toi muon thue can ho 2 phong ngu 15 trieu"),
+                "guest-browser-session"
+        );
+
+        assertThat(response.createdById()).isNull();
+        assertThat(response.guestSessionId()).isEqualTo("guest-browser-session");
+        assertThat(response.suggestedListings()).hasSize(1);
+
+        ArgumentCaptor<com.javaweb.ai.dto.AiCompletionRequest> captor =
+                ArgumentCaptor.forClass(com.javaweb.ai.dto.AiCompletionRequest.class);
+        verify(aiService).complete(captor.capture());
+        assertThat(captor.getValue().metadataJson()).contains("\"type\":\"GUEST\"");
+        assertThat(captor.getValue().metadataJson()).contains("\"guestSessionId\":\"guest-browser-session\"");
     }
 
     @Test
@@ -143,6 +213,102 @@ class ChatServiceTest {
     }
 
     @Test
+    void shouldLetAiAnswerCasualConversationWithoutSearchingListings() {
+        User user = user(10L);
+        AiConversation conversation = conversation(user);
+        when(conversationRepository.findWithMessagesById(100L)).thenReturn(Optional.of(conversation));
+        when(messageRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(messageRepository.findAllByConversationIdOrderByCreatedAtAsc(100L))
+                .thenReturn(
+                        List.of(new AiMessage(AiMessageRole.USER, "Xin chao, hom nay ban the nao?")),
+                        List.of(
+                                new AiMessage(AiMessageRole.USER, "Xin chao, hom nay ban the nao?"),
+                                assistant("Chao ban, toi co the ho tro tu van bat dong san khi ban can.", AiRequestStatus.SUCCESS)
+                        )
+                );
+        when(aiService.complete(any())).thenReturn(new AiCompletionResponse(
+                AiRequestStatus.SUCCESS,
+                "test-provider",
+                "test-model",
+                "Chao ban, toi co the ho tro tu van bat dong san khi ban can.",
+                "STOP",
+                20,
+                30,
+                50,
+                null
+        ));
+
+        ChatSessionResponse response = service.sendMessage(
+                100L,
+                new ChatMessageRequest("Xin chao, hom nay ban the nao?"),
+                customer()
+        );
+
+        assertThat(response.messages()).hasSize(2);
+        assertThat(response.messages().get(1).content()).contains("Chao ban");
+        assertThat(response.suggestedListings()).isEmpty();
+
+        ArgumentCaptor<com.javaweb.ai.dto.AiCompletionRequest> captor =
+                ArgumentCaptor.forClass(com.javaweb.ai.dto.AiCompletionRequest.class);
+        verify(aiService).complete(captor.capture());
+        assertThat(captor.getValue().metadataJson()).contains("\"realEstateIntent\":false");
+        assertThat(captor.getValue().metadataJson()).contains("\"responseLanguage\":\"Vietnamese\"");
+        assertThat(captor.getValue().userPrompt()).contains("Respond in Vietnamese");
+        assertThat(captor.getValue().metadataJson()).contains("\"candidateIds\":[]");
+        verify(listingRepository, never()).findRecommendationCandidates(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
+        );
+        verify(listingRepository, never()).findAllByStatusAndVisibilityAndDeletedAtIsNull(any(), any(), any());
+    }
+
+    @Test
+    void shouldAskForRequirementsBeforeSearchingBroadBuyingIntent() {
+        User user = user(10L);
+        AiConversation conversation = conversation(user);
+        when(conversationRepository.findWithMessagesById(100L)).thenReturn(Optional.of(conversation));
+        when(messageRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(messageRepository.findAllByConversationIdOrderByCreatedAtAsc(100L))
+                .thenReturn(
+                        List.of(new AiMessage(AiMessageRole.USER, "Toi muon mua nha")),
+                        List.of(
+                                new AiMessage(AiMessageRole.USER, "Toi muon mua nha"),
+                                assistant("Anh chi cho em xin ngan sach, khu vuc va so phong ngu mong muon nhe.", AiRequestStatus.SUCCESS)
+                        )
+                );
+        when(aiService.complete(any())).thenReturn(new AiCompletionResponse(
+                AiRequestStatus.SUCCESS,
+                "test-provider",
+                "test-model",
+                "Anh chi cho em xin ngan sach, khu vuc va so phong ngu mong muon nhe.",
+                "STOP",
+                20,
+                30,
+                50,
+                null
+        ));
+
+        ChatSessionResponse response = service.sendMessage(
+                100L,
+                new ChatMessageRequest("Toi muon mua nha"),
+                customer()
+        );
+
+        assertThat(response.suggestedListings()).isEmpty();
+
+        ArgumentCaptor<com.javaweb.ai.dto.AiCompletionRequest> captor =
+                ArgumentCaptor.forClass(com.javaweb.ai.dto.AiCompletionRequest.class);
+        verify(aiService).complete(captor.capture());
+        assertThat(captor.getValue().metadataJson()).contains("\"realEstateIntent\":true");
+        assertThat(captor.getValue().metadataJson()).contains("\"readyForRecommendations\":false");
+        assertThat(captor.getValue().metadataJson()).contains("\"responseLanguage\":\"Vietnamese\"");
+        assertThat(captor.getValue().userPrompt()).contains("Respond in Vietnamese");
+        verify(listingRepository, never()).findRecommendationCandidates(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
+        );
+        verify(listingRepository, never()).findAllByStatusAndVisibilityAndDeletedAtIsNull(any(), any(), any());
+    }
+
+    @Test
     void shouldUseGuardrailFallbackWhenAiIsSkipped() {
         User user = user(10L);
         AiConversation conversation = conversation(user);
@@ -195,6 +361,12 @@ class ChatServiceTest {
     private AiConversation conversation(User user) {
         AiConversation conversation = new AiConversation(user, "Find apartment");
         ReflectionTestUtils.setField(conversation, "id", 100L);
+        return conversation;
+    }
+
+    private AiConversation guestConversation(String guestSessionId) {
+        AiConversation conversation = new AiConversation(guestSessionId, "Landing chat");
+        ReflectionTestUtils.setField(conversation, "id", 101L);
         return conversation;
     }
 

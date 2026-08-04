@@ -1,6 +1,7 @@
 package com.javaweb.auth.controller;
 
 import com.javaweb.auth.dto.AssignUserRolesRequest;
+import com.javaweb.auth.dto.CreateUserRequest;
 import com.javaweb.auth.dto.UpdateUserStatusRequest;
 import com.javaweb.auth.dto.UserManagementResponse;
 import com.javaweb.auth.security.AuthUserPrincipal;
@@ -16,6 +17,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -47,6 +49,18 @@ public class UserManagementController {
     ) {
         return ApiResponse.success(
                 userManagementService.listUsers(page, size, sortBy, direction)
+        );
+    }
+
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<UserManagementResponse> createUser(
+            @Valid @RequestBody CreateUserRequest request,
+            @AuthenticationPrincipal AuthUserPrincipal actor
+    ) {
+        return ApiResponse.success(
+                "User created successfully",
+                userManagementService.createUser(request, actor)
         );
     }
 
